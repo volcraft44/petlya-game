@@ -1,0 +1,10 @@
+# Godot cache & generated files
+.godot/
+*.import
+
+# Claude local settings
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
