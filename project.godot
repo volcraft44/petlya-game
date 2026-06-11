@@ -80,3 +80,4 @@ common/physics_interpolation=true
 textures/canvas_textures/default_texture_filter=0
 environment/defaults/default_clear_color=Color(0.08, 0.06, 0.12, 1)
 2d/snap/snap_2d_transforms_to_pixel=true
+textures/vram_compression/import_etc2_astc=true
