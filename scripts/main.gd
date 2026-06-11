@@ -181,6 +181,13 @@ func _ready():
 	horror_effects.set_script(he_script)
 	add_child(horror_effects)
 
+	# Мобильные кнопки управления (только на Android/iOS)
+	var mc_script = load("res://scripts/mobile_controls.gd")
+	var mobile_controls = CanvasLayer.new()
+	mobile_controls.set_script(mc_script)
+	mobile_controls.layer = 50
+	add_child(mobile_controls)
+
 	# Lockpick UI
 	lockpick_ui = lockpick_scene.instantiate()
 	var lockpick_canvas = CanvasLayer.new()
