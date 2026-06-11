@@ -247,7 +247,8 @@ func _process(delta):
 			final_choice_visible = false
 			var choice = "escape" if final_choice_selected == 0 else "save"
 			final_choice_made.emit(choice)
-	draw_node.queue_redraw()
+	# Перерисовку запускает throttle выше (каждый 2-й кадр). Безусловный
+	# redraw здесь убран — он сводил throttle на нет и рисовал HUD каждый кадр.
 
 func show_story_text(text: String, duration: float = 3.0):
 	story_text = text
