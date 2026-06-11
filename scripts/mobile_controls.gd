@@ -22,8 +22,8 @@ class Btn:
 var buttons: Array = []
 var touch_map: Dictionary = {}  # touch_id -> button index
 
-const ALPHA_IDLE    := 0.45
-const ALPHA_PRESSED := 0.75
+const ALPHA_IDLE: float    = 0.45
+const ALPHA_PRESSED: float = 0.75
 
 func _ready():
 	# Показываем только на сенсорных устройствах
@@ -135,7 +135,7 @@ func _input(event: InputEvent):
 func _handle_touch(tid: int, pos: Vector2, pressed: bool):
 	if pressed:
 		for i in buttons.size():
-			var b: Btn = buttons[i]
+			var b = buttons[i]
 			if b.rect.has_point(pos) and b.touch_id == -1:
 				b.touch_id    = tid
 				b.is_pressed  = true
@@ -147,7 +147,7 @@ func _handle_touch(tid: int, pos: Vector2, pressed: bool):
 	else:
 		if tid in touch_map:
 			var i: int = touch_map[tid]
-			var b: Btn = buttons[i]
+			var b = buttons[i]
 			b.touch_id   = -1
 			b.is_pressed = false
 			touch_map.erase(tid)
@@ -158,7 +158,7 @@ func _handle_touch(tid: int, pos: Vector2, pressed: bool):
 func _handle_drag(tid: int, pos: Vector2):
 	if tid in touch_map:
 		var old_i: int = touch_map[tid]
-		var old_b: Btn = buttons[old_i]
+		var old_b = buttons[old_i]
 		if not old_b.rect.has_point(pos):
 			# Палец вышел за кнопку — отпускаем
 			old_b.touch_id   = -1
@@ -168,7 +168,7 @@ func _handle_drag(tid: int, pos: Vector2):
 			draw_node.queue_redraw()
 			# Проверяем, не попал ли в другую кнопку
 			for i in buttons.size():
-				var b: Btn = buttons[i]
+				var b = buttons[i]
 				if b.rect.has_point(pos) and b.touch_id == -1:
 					b.touch_id   = tid
 					b.is_pressed = true
@@ -179,7 +179,7 @@ func _handle_drag(tid: int, pos: Vector2):
 	else:
 		# Касание не было на кнопке — проверяем новое положение
 		for i in buttons.size():
-			var b: Btn = buttons[i]
+			var b = buttons[i]
 			if b.rect.has_point(pos) and b.touch_id == -1:
 				b.touch_id   = tid
 				b.is_pressed = true
@@ -192,14 +192,14 @@ func _handle_drag(tid: int, pos: Vector2):
 # ─────────────────── НАЖАТИЕ / ОТПУСКАНИЕ ───────────────────
 
 func _press(idx: int):
-	var b: Btn = buttons[idx]
+	var b = buttons[idx]
 	if b.action != "":
 		_action(b.action, true)
 	else:
 		_special(b.special, true)
 
 func _release(idx: int):
-	var b: Btn = buttons[idx]
+	var b = buttons[idx]
 	if b.action != "":
 		_action(b.action, false)
 	else:
@@ -215,9 +215,9 @@ func _action(name: String, pressed: bool):
 func _special(sp: String, pressed: bool):
 	match sp:
 		"lmb":
-			_mouse_btn(MOUSE_BUTTON_LEFT, pressed)
+			_mouse_btn(MOUSE_BUTTON_LEFT as MouseButton, pressed)
 		"rmb":
-			_mouse_btn(MOUSE_BUTTON_RIGHT, pressed)
+			_mouse_btn(MOUSE_BUTTON_RIGHT as MouseButton, pressed)
 		"ctrl":
 			_key(KEY_CTRL, pressed)
 		"e_key":
@@ -229,7 +229,7 @@ func _special(sp: String, pressed: bool):
 		"c_key":
 			_key(KEY_C, pressed)
 
-func _mouse_btn(btn: int, pressed: bool):
+func _mouse_btn(btn: MouseButton, pressed: bool):
 	var ev := InputEventMouseButton.new()
 	ev.button_index = btn
 	ev.pressed      = pressed
@@ -252,8 +252,8 @@ func _on_draw():
 	var font_size := int(_s(16))
 
 	for b in buttons:
-		var rect: Rect2 = b.rect
-		var col: Color  = b.color
+		var rect = b.rect
+		var col = b.color
 
 		if b.is_pressed:
 			col = Color(
