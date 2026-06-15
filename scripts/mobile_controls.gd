@@ -16,8 +16,35 @@ var vh: float = 768.0
 var buttons: Array = []          # [{rect, label, action, special, pressed, tid}]
 var touch_map: Dictionary = {}   # touch_id -> индекс кнопки
 
+# Кнопки активны только во время игры. В меню они скрыты, чтобы не
+# перехватывать тач у кнопок меню ("ПРОСТО НАЧАТЬ" и т.п.).
+var active: bool = false
+
 const ALPHA_IDLE: float    = 0.40
 const ALPHA_PRESSED: float = 0.80
+
+# Показать/скрыть игровые кнопки. Вызывается из main.gd при старте игры и
+# при возврате в меню.
+func set_active(a: bool) -> void:
+	active = a
+	if draw_node:
+		draw_node.visible = a
+	if not a:
+		# Сбрасываем все зажатия, чтобы движение не "залипло"
+		for b in buttons:
+			if b["pressed"]:
+				b["pressed"] = false
+				b["tid"] = -1
+				_fire_release_all(b)
+		touch_map.clear()
+		if draw_node:
+			draw_node.queue_redraw()
+
+func _fire_release_all(b) -> void:
+	if b["action"] != "":
+		_send_action(b["action"], false)
+	elif b["special"] != "":
+		_send_special(b["special"], false)
 
 func _ready() -> void:
 	# Только сенсорные устройства
@@ -40,6 +67,8 @@ func _ready() -> void:
 	add_child(draw_node)
 
 	_create_buttons()
+	# Стартуем скрытыми — main.gd включит при старте игры
+	draw_node.visible = active
 
 func _create_buttons() -> void:
 	buttons.clear()
@@ -99,6 +128,8 @@ func _add(rect: Rect2, label: String, action: String, special: String) -> void:
 # ─────────────────── ВВОД (TOUCH) ───────────────────
 
 func _input(event: InputEvent) -> void:
+	if not active:
+		return  # В меню не перехватываем тач — пусть кнопки меню работают
 	if event is InputEventScreenTouch:
 		_touch(event.index, event.position, event.pressed)
 	elif event is InputEventScreenDrag:

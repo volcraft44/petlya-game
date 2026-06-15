@@ -35,6 +35,7 @@ var meat_room_done: bool = false
 # ── CS-overlay + Rush B + boss case opening ──
 var cs_overlay: CanvasLayer = null
 var background_layers: CanvasLayer = null   # параллакс-фон
+var mobile_controls: CanvasLayer = null     # виртуальные кнопки (Android/iOS)
 var rush_b_level: int = -1
 var rush_b_done: bool = false
 # Защищаем от повторного триггера ACE в одной и той же комнате
@@ -130,6 +131,8 @@ var darkness: CanvasModulate
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS  # Process even when paused (for ESC menu)
+	# FPS-лимит по платформе: телефон — 60 (экономия батареи/GPU), ПК — 120
+	Engine.max_fps = 60 if OS.has_feature("mobile") else 120
 	# Camera
 	camera = Camera2D.new()
 	camera.zoom = Vector2(2.9, 2.9)  # HD: больше zoom т.к. viewport 1280x768
@@ -183,7 +186,7 @@ func _ready():
 
 	# Мобильные кнопки управления (только на Android/iOS)
 	var mc_script = load("res://scripts/mobile_controls.gd")
-	var mobile_controls = CanvasLayer.new()
+	mobile_controls = CanvasLayer.new()
 	mobile_controls.set_script(mc_script)
 	mobile_controls.layer = 50
 	add_child(mobile_controls)
@@ -212,6 +215,9 @@ func _show_start_menu():
 		tmp.queue_free()
 	menu.quick_start.connect(_start_game)
 	menu.custom_start.connect(_start_custom_game)
+	# В меню игровые кнопки скрыты, чтобы не перехватывать тач у Button-ов меню
+	if mobile_controls and mobile_controls.has_method("set_active"):
+		mobile_controls.set_active(false)
 
 var _custom_config: Dictionary = {}   # сохранённая кастомка для применения после создания игрока
 
@@ -220,6 +226,9 @@ func _start_custom_game(cfg: Dictionary):
 	_start_game()
 
 func _start_game():
+	# Игра началась — показываем виртуальные кнопки на телефоне
+	if mobile_controls and mobile_controls.has_method("set_active"):
+		mobile_controls.set_active(true)
 	# Daily seed (если включён в кастомной игре)
 	if _custom_config.get("daily_seed", false):
 		var d = Time.get_date_dict_from_system()
@@ -2236,6 +2245,9 @@ func _on_weapon_selected(weapon_id: int):
 		player.is_dead = false
 
 func _on_player_died():
+	# Скрываем игровые кнопки, чтобы не мешали кнопкам экрана смерти/рестарта
+	if mobile_controls and mobile_controls.has_method("set_active"):
+		mobile_controls.set_active(false)
 	total_deaths += 1
 	_save_deaths()
 	# Мета: считаем смерть и достигнутый уровень
