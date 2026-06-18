@@ -134,6 +134,12 @@ func _input(event: InputEvent) -> void:
 		_touch(event.index, event.position, event.pressed)
 	elif event is InputEventScreenDrag:
 		_drag(event.index, event.position)
+	elif event is InputEventMouseButton or event is InputEventMouseMotion:
+		# Эмуляция мыши из тача включена (нужна для кнопок меню). Чтобы
+		# нажатия по нашим кнопкам (особенно D-pad) не превращались в
+		# фантомные клики-атаки по игроку — поглощаем мышь в зоне кнопок.
+		if _button_at(event.position) >= 0:
+			get_viewport().set_input_as_handled()
 
 func _touch(tid: int, pos: Vector2, pressed: bool) -> void:
 	if pressed:
@@ -219,7 +225,10 @@ func _send_mouse(btn: int, pressed: bool) -> void:
 	var ev := InputEventMouseButton.new()
 	ev.button_index = btn
 	ev.pressed = pressed
-	ev.position = get_viewport().get_mouse_position()
+	# Шлём из центра экрана — вне зон кнопок, иначе наш же клик поглотится
+	# фильтром эмулированной мыши в _input. Направление атаки берётся из
+	# зажатых стрелок, а не из позиции, так что центр безопасен.
+	ev.position = Vector2(vw * 0.5, vh * 0.45)
 	Input.parse_input_event(ev)
 
 func _send_key(kc: int, pressed: bool) -> void:

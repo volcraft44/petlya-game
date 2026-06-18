@@ -2344,6 +2344,26 @@ func _pick_weighted(weighted: Array) -> int:
 			return w[0]
 	return weighted[0][0]
 
+# Находит Y верха твёрдого пола в колонке под точкой (px, py_hint).
+# Гарантирует, что объект встанет НА блок, а не повиснет в воздухе и не
+# окажется внутри стены. Используется для дверей и спавна врагов.
+func _floor_y_in_column(px: float, py_hint: float) -> float:
+	if grid.size() == 0 or grid_cols == 0:
+		return py_hint
+	var gc := clampi(int(px / tile_size), 0, grid_cols - 1)
+	var gr := clampi(int(py_hint / tile_size), 0, grid_rows - 1)
+	# Если точка-подсказка внутри блока — поднимаемся вверх до воздуха
+	while gr > 0 and grid[gr][gc] == 1:
+		gr -= 1
+	# Спускаемся вниз до первого твёрдого тайла (это пол)
+	var r := gr
+	while r + 1 < grid_rows and grid[r + 1][gc] == 0:
+		r += 1
+	if r + 1 < grid_rows and grid[r + 1][gc] == 1:
+		return float(r + 1) * tile_size  # верх пол-тайла = уровень пола
+	# Пол не найден (сквозная шахта) — ставим на нижний ряд
+	return float(grid_rows - 1) * tile_size
+
 func _get_spawn_position() -> Vector2:
 	# Pick a random non-start cave, verify position is reachable
 	var spawn_caves = caves.filter(func(c): return c.type != "start" and c.type != "chest")
@@ -2355,7 +2375,8 @@ func _get_spawn_position() -> Vector2:
 	for attempt in 30:
 		var cave = spawn_caves[randi() % spawn_caves.size()]
 		var px = cave.x + randf_range(-20, 20)
-		var py = cave.floor_y - 1
+		# Привязываем к реальному полу в этой колонке (не висеть в воздухе)
+		var py = _floor_y_in_column(px, cave.floor_y) - 1
 
 		# Check that the grid cell is reachable from start
 		if reachable_set.size() > 0:
@@ -2374,7 +2395,7 @@ func _get_spawn_position() -> Vector2:
 	# Fallback: use start cave
 	for cave in caves:
 		if cave.type == "start":
-			return Vector2(cave.x, cave.floor_y - 1)
+			return Vector2(cave.x, _floor_y_in_column(cave.x, cave.floor_y) - 1)
 	return Vector2(60, floor_y - 1)
 
 func _spawn_door():
@@ -2402,13 +2423,16 @@ func _spawn_door():
 			break
 
 	if door_cave:
-		door.position = Vector2(door_cave.x, door_cave.floor_y - 14)
+		# Привязываем дверь к реальному полу — чтобы не висела в воздухе/в блоке
+		var fy = _floor_y_in_column(door_cave.x, door_cave.floor_y)
+		door.position = Vector2(door_cave.x, fy - 14)
 	else:
 		var best = caves[0]
 		for cave in caves:
 			if cave.x > best.x:
 				best = cave
-		door.position = Vector2(best.x, best.floor_y - 14)
+		var fy2 = _floor_y_in_column(best.x, best.floor_y)
+		door.position = Vector2(best.x, fy2 - 14)
 
 	add_child(door)
 	doors.append(door)
@@ -2849,7 +2873,8 @@ func _spawn_single_enemy(x: float, y: float):
 	var dmg = 10 + room_level * 2
 	enemy.setup(eclass, hp, spd, dmg)
 	enemy.player = player_ref
-	enemy.position = Vector2(x, y)
+	# Привязываем к реальному полу — арена-враг не должен висеть в воздухе
+	enemy.position = Vector2(x, _floor_y_in_column(x, y) - 1)
 	add_child(enemy)
 	enemies.append(enemy)
 	enemy.died.connect(_on_enemy_died)
