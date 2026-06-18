@@ -446,12 +446,21 @@ func _get_recipes(station: String, player) -> Array:
 	return recipes
 
 func _unhandled_input(event):
-	if show_controls and event is InputEventKey and event.pressed and event.keycode == KEY_ENTER:
-		show_controls = false
-		get_viewport().set_input_as_handled()
-		if draw_node:
-			draw_node.queue_redraw()
-		return
+	# Закрытие обучения: Enter (ПК) ИЛИ касание экрана / Прыжок (телефон)
+	if show_controls:
+		var close_it := false
+		if event is InputEventKey and event.pressed and event.keycode == KEY_ENTER:
+			close_it = true
+		elif event is InputEventScreenTouch and event.pressed:
+			close_it = true
+		elif event.is_action_pressed("jump") or event.is_action_pressed("ui_accept"):
+			close_it = true
+		if close_it:
+			show_controls = false
+			get_viewport().set_input_as_handled()
+			if draw_node:
+				draw_node.queue_redraw()
+			return
 
 	# === Relic choice input ===
 	if relic_menu_open and event is InputEventKey and event.pressed:
@@ -1335,7 +1344,8 @@ func _draw_controls(screen_size: Vector2):
 
 	y += 6
 	var pulse = sin(Time.get_ticks_msec() * 0.004) * 0.3 + 0.7
-	draw_node.draw_string(font, Vector2(cx - 60, y), "[Enter] Continue", HORIZONTAL_ALIGNMENT_CENTER, -1, 12, Color(1, 1, 0.6, pulse))
+	var cont_txt = "Нажми на экран — продолжить" if OS.has_feature("mobile") else "[Enter] Continue"
+	draw_node.draw_string(font, Vector2(cx - 90, y), cont_txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 12, Color(1, 1, 0.6, pulse))
 
 func _shop_navigate(dir: int):
 	if shop_items.is_empty():

@@ -71,46 +71,62 @@ func _ready() -> void:
 	draw_node.visible = active
 
 func _create_buttons() -> void:
+	# Раскладка в духе Dead Cells: слева — крупные ←/→ под большой палец и
+	# отдельные ↑/↓ для лестниц/спуска; справа — кластер действий, где
+	# Прыжок и Атака самые большие и в зоне досягаемости пальца.
 	buttons.clear()
 
-	var pad := 26.0
-	var gap := 10.0
-	var bs  := 96.0     # размер кнопки направления
+	var pad := 30.0
+	var gap := 14.0
 	var H := vh
 	var W := vw
 
-	# ── ЛЕВО: крестовина ──
-	#        [↑]
-	#   [←]      [→]
-	#        [↓]
-	var lx := pad
-	var ly := H - pad - bs * 3 - gap * 2
+	# ════════ ЛЕВО — движение ════════
+	# Большие ←/→ внизу, рядом; ↑/↓ — пара повыше слева.
+	var mw := 132.0   # ширина крупной кнопки движения
+	var mh := 124.0   # высота
+	var left_x := pad
+	var right_x := pad + mw + gap
+	var move_y := H - pad - mh
 
-	_add(Rect2(lx + bs + gap,     ly,                 bs, bs), "↑", "move_up", "")
-	_add(Rect2(lx,                ly + bs + gap,      bs, bs), "←", "move_left", "")
-	_add(Rect2(lx + (bs+gap)*2,   ly + bs + gap,      bs, bs), "→", "move_right", "")
-	_add(Rect2(lx + bs + gap,     ly + (bs+gap)*2,    bs, bs), "↓", "move_down", "")
+	_add(Rect2(left_x,  move_y, mw, mh), "◀", "move_left", "")
+	_add(Rect2(right_x, move_y, mw, mh), "▶", "move_right", "")
 
-	# ── ПРАВО: действия ──
-	# верх:  [ЛЕЧ] [СПЕ] [E]
-	# низ:   [РЫВ] [АТК] [ПРЫЖОК]
-	var rx := W - pad
-	var ry := H - pad
-	var jbs := 124.0    # прыжок — крупная
-	var sbs := 84.0     # вспомогательные
+	# ↑ (лезть по лестнице) и ↓ (спуск/слезть) — над движением
+	var uw := 100.0
+	var uh := 82.0
+	var up_y := move_y - gap - uh
+	_add(Rect2(left_x,            up_y, uw, uh), "▲", "move_up", "")
+	_add(Rect2(left_x + uw + gap, up_y, uw, uh), "▼", "move_down", "")
 
-	var jump_x := rx - jbs
-	var atk_x  := jump_x - gap - bs
-	var dash_x := atk_x  - gap - bs
+	# ════════ ПРАВО — действия ════════
+	# Бриллиант: ПРЫЖОК (низ-право) и АТАКА (слева от него) — крупные.
+	# РЫВОК и СПЕЦ — повыше. ЛЕЧ и E — маленькие сверху.
+	var jbs := 132.0   # Прыжок — самая большая
+	var abs_ := 120.0  # Атака — большая
+	var mbs := 92.0    # рывок / спец
+	var ssb := 76.0    # лечение / взаимодействие
 
-	_add(Rect2(jump_x, ry - jbs, jbs, jbs), "ПРЫЖОК", "jump", "")
-	_add(Rect2(atk_x,  ry - bs,  bs,  bs),  "АТК",    "",     "lmb")
-	_add(Rect2(dash_x, ry - bs,  bs,  bs),  "РЫВ",    "",     "ctrl")
+	var jump_x := W - pad - jbs
+	var jump_y := H - pad - jbs
+	_add(Rect2(jump_x, jump_y, jbs, jbs), "ПРЫГ", "jump", "")
 
-	var mid_y := ry - bs - gap - sbs
-	_add(Rect2(jump_x + jbs - sbs, mid_y, sbs, sbs), "E",   "interact", "")
-	_add(Rect2(atk_x + bs - sbs,   mid_y, sbs, sbs), "СПЕ", "",         "rmb")
-	_add(Rect2(dash_x + bs - sbs,  mid_y, sbs, sbs), "ЛЕЧ", "",         "h_key")
+	var atk_x := jump_x - gap - abs_
+	var atk_y := H - pad - abs_
+	_add(Rect2(atk_x, atk_y, abs_, abs_), "АТАКА", "", "lmb")
+
+	# РЫВОК над атакой, СПЕЦ над прыжком
+	var dash_x := atk_x + (abs_ - mbs) * 0.5
+	var dash_y := atk_y - gap - mbs
+	_add(Rect2(dash_x, dash_y, mbs, mbs), "РЫВОК", "", "ctrl")
+
+	var spec_x := jump_x + (jbs - mbs) * 0.5
+	var spec_y := jump_y - gap - mbs
+	_add(Rect2(spec_x, spec_y, mbs, mbs), "СПЕЦ", "", "rmb")
+
+	# ЛЕЧ и E — маленькие, ещё выше
+	_add(Rect2(dash_x + (mbs - ssb) * 0.5, dash_y - gap - ssb, ssb, ssb), "ЛЕЧ", "", "h_key")
+	_add(Rect2(spec_x + (mbs - ssb) * 0.5, spec_y - gap - ssb, ssb, ssb), "E", "interact", "")
 
 	if draw_node:
 		draw_node.queue_redraw()
@@ -241,26 +257,59 @@ func _send_key(kc: int, pressed: bool) -> void:
 
 # ─────────────────── ОТРИСОВКА ───────────────────
 
+# Базовый цвет кнопки по её функции (цветовая кодировка как в экшен-играх)
+func _button_color(b) -> Color:
+	var act: String = b["action"]
+	var sp: String = b["special"]
+	if act in ["move_left", "move_right", "move_up", "move_down"]:
+		return Color(0.20, 0.22, 0.30)   # движение — нейтральный тёмный
+	if act == "jump":
+		return Color(0.18, 0.50, 0.95)   # прыжок — синий
+	if sp == "lmb":
+		return Color(0.90, 0.25, 0.20)   # атака — красный
+	if sp == "rmb":
+		return Color(0.95, 0.60, 0.12)   # спец — оранжевый
+	if sp == "ctrl":
+		return Color(0.60, 0.25, 0.95)   # рывок — фиолетовый
+	if sp == "h_key":
+		return Color(0.20, 0.75, 0.40)   # лечение — зелёный
+	if act == "interact":
+		return Color(0.85, 0.80, 0.20)   # взаимодействие — жёлтый
+	return Color(0.25, 0.25, 0.30)
+
 func _on_draw() -> void:
 	if not draw_node:
 		return
 	var font := ThemeDB.fallback_font
-	var fs := 26
 
 	for b in buttons:
 		var rect: Rect2 = b["rect"]
 		var pressed: bool = b["pressed"]
-		var a := ALPHA_PRESSED if pressed else ALPHA_IDLE
-		var base := Color(0.10, 0.10, 0.14, a)
+		var col := _button_color(b)
+		var is_move: bool = b["action"] in ["move_left", "move_right", "move_up", "move_down"]
+		# При нажатии — ярче и насыщеннее
+		var fill := col
+		fill.a = ALPHA_PRESSED if pressed else ALPHA_IDLE
 		if pressed:
-			base = Color(0.30, 0.55, 1.0, a)
+			fill = fill.lightened(0.25)
+			fill.a = ALPHA_PRESSED
+		var border_col := Color(1, 1, 1, 0.65 if pressed else 0.35)
 
-		# Кнопка с закруглением имитируем простым прямоугольником + рамка
-		draw_node.draw_rect(rect, base, true)
-		draw_node.draw_rect(rect, Color(1, 1, 1, 0.55 if pressed else 0.30), false, 3.0)
+		var center := rect.position + rect.size * 0.5
+		if is_move:
+			# Движение — закруглённый прямоугольник (рисуем прямоугольник + рамка)
+			draw_node.draw_rect(rect, fill, true)
+			draw_node.draw_rect(rect, border_col, false, 3.0)
+		else:
+			# Действия — круг (удобнее для большого пальца)
+			var r := minf(rect.size.x, rect.size.y) * 0.5
+			draw_node.draw_circle(center, r, fill)
+			draw_node.draw_arc(center, r, 0, TAU, 32, border_col, 3.0, true)
 
+		# Подпись по центру. Стрелки крупнее, текст-подписи мельче.
+		var fs := 40 if is_move else (22 if b["label"].length() <= 1 else 17)
 		var ts := font.get_string_size(b["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		var tx := rect.position.x + (rect.size.x - ts.x) * 0.5
-		var ty := rect.position.y + (rect.size.y + ts.y) * 0.5 - 4.0
+		var tx := center.x - ts.x * 0.5
+		var ty := center.y + ts.y * 0.5 - 5.0
 		draw_node.draw_string(font, Vector2(tx, ty), b["label"],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.95))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.97))
