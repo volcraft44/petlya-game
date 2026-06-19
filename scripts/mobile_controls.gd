@@ -72,19 +72,22 @@ func _ready() -> void:
 	draw_node.visible = active
 
 func _create_buttons() -> void:
-	# Только кнопки действий (движение — джойстик). Справа кластер-бриллиант.
+	# Движение — джойстик слева. Кнопки распределены по краям:
+	#  • низ-право: основной кластер (ПРЫГ, АТАКА, РЫВОК, СПЕЦ) под большой палец
+	#  • верх-право: вспомогательные (E — взаимодействие, ЛЕЧ) — не мешают
 	buttons.clear()
 
-	var pad := 34.0
+	var pad := 30.0
 	var gap := 14.0
 	var H := vh
 	var W := vw
 
-	var jbs := 134.0   # Прыжок — самая большая
-	var abs_ := 122.0  # Атака — большая
-	var mbs := 94.0    # рывок / спец
-	var ssb := 78.0    # лечение / E
+	var jbs := 140.0   # Прыжок — самая большая
+	var abs_ := 126.0  # Атака — большая
+	var mbs := 98.0    # рывок / спец
+	var ssb := 88.0    # вспомогательные (верхний угол)
 
+	# ── Низ-право: основной кластер ──
 	var jump_x := W - pad - jbs
 	var jump_y := H - pad - jbs
 	_add(Rect2(jump_x, jump_y, jbs, jbs), "ПРЫГ", "jump", "")
@@ -93,16 +96,20 @@ func _create_buttons() -> void:
 	var atk_y := H - pad - abs_
 	_add(Rect2(atk_x, atk_y, abs_, abs_), "АТАКА", "", "lmb")
 
+	# РЫВОК над атакой, СПЕЦ над прыжком
 	var dash_x := atk_x + (abs_ - mbs) * 0.5
 	var dash_y := atk_y - gap - mbs
-	_add(Rect2(dash_x, dash_y, mbs, mbs), "РЫВОК", "", "ctrl")
+	_add(Rect2(dash_x, dash_y, mbs, mbs), "РЫВ", "", "ctrl")
 
 	var spec_x := jump_x + (jbs - mbs) * 0.5
 	var spec_y := jump_y - gap - mbs
 	_add(Rect2(spec_x, spec_y, mbs, mbs), "СПЕЦ", "", "rmb")
 
-	_add(Rect2(dash_x + (mbs - ssb) * 0.5, dash_y - gap - ssb, ssb, ssb), "ЛЕЧ", "", "h_key")
-	_add(Rect2(spec_x + (mbs - ssb) * 0.5, spec_y - gap - ssb, ssb, ssb), "E", "interact", "")
+	# ── Верх-право: вспомогательные (взаимодействие и лечение) ──
+	var e_x := W - pad - ssb
+	var e_y := pad
+	_add(Rect2(e_x, e_y, ssb, ssb), "E", "", "e_key")
+	_add(Rect2(e_x - gap - ssb, e_y, ssb, ssb), "ЛЕЧ", "", "h_key")
 
 	if draw_node:
 		draw_node.queue_redraw()
@@ -247,6 +254,10 @@ func _send_special(sp: String, pressed: bool) -> void:
 			_send_key(KEY_CTRL, pressed)
 		"h_key":
 			_send_key(KEY_H, pressed)
+		"e_key":
+			# Двери/предметы ловят именно клавишу E (а не action), плюс
+			# "interact" в input map тоже привязан к E — так работает всё.
+			_send_key(KEY_E, pressed)
 
 func _send_mouse(btn: int, pressed: bool) -> void:
 	var ev := InputEventMouseButton.new()
@@ -279,7 +290,7 @@ func _button_color(b) -> Color:
 		return Color(0.60, 0.25, 0.95)
 	if sp == "h_key":
 		return Color(0.20, 0.75, 0.40)
-	if act == "interact":
+	if sp == "e_key":
 		return Color(0.85, 0.80, 0.20)
 	return Color(0.25, 0.25, 0.30)
 

@@ -159,6 +159,7 @@ func _ready():
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 8.0
 	add_child(camera)
+	camera.make_current()  # гарантируем, что это активная камера (для куллинга тайлов)
 
 	# Тёмный лиловый сумрак — атмосферно но не светло.
 	darkness = CanvasModulate.new()
