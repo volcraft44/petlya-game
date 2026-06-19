@@ -129,10 +129,10 @@ func _on_draw() -> void:
 			_draw_node.draw_rect(Rect2(screen_x, screen_y, item.w, item.h), item.col)
 			_draw_node.draw_rect(Rect2(screen_x, screen_y, item.w, 3),
 				Color(item.col.r * 1.3, item.col.g * 1.3, item.col.b * 1.3, item.col.a))
-		# Volumetric fog между слоями (более густой между дальним и средним)
-		var fog_layer_a = 0.05 + (2 - li) * 0.03
-		_draw_node.draw_rect(Rect2(0, 0, vs.x, vs.y),
-			Color(fog_col.r, fog_col.g, fog_col.b, fog_layer_a))
+	# Туман — ОДИН полноэкранный проход вместо трёх (было по разу на слой =
+	# тройной овердров каждый кадр). Суммарная плотность сохранена.
+	_draw_node.draw_rect(Rect2(0, 0, vs.x, vs.y),
+		Color(fog_col.r, fog_col.g, fog_col.b, 0.16))
 
 	# Волнистые туманные полосы поверх всех фоновых слоёв
 	for band in _fog_bands:

@@ -2439,6 +2439,11 @@ func _spawn_door():
 	door.door_interact.connect(_on_door_interact)
 
 func _process(delta):
+	# Перерисовка комнаты только при смене видимой области (отсечение по камере).
+	# Босс-комнаты перерисовываются каждый кадр ниже, им это не нужно.
+	if not is_boss_room:
+		_check_draw_cull()
+
 	# Туман войны миникарты: обновляем 6 раз/сек (не каждый кадр)
 	_explore_cd -= delta
 	if _explore_cd <= 0.0 and player_ref and is_instance_valid(player_ref) and explored.size() > 0:
@@ -3994,9 +3999,30 @@ func _tile_shade(r: int, c: int) -> float:
 	return fmod(abs(sin(float(n) * 0.7134)) * 43758.5453, 1.0) * 0.06 - 0.03
 
 func _get_visible_tile_range() -> Array:
-	# Возвращаем ВЕСЬ грид: комната рисуется целиком один раз, Godot кэширует
-	# draw-команды. Это убирает спайки кадра при движении камеры.
-	return [0, grid_cols, 0, grid_rows]
+	# Отсечение по камере: декор/руда рисуются только в видимой области, а не
+	# по всей комнате. Раньше возвращался весь грид — и room._draw отправлял
+	# тысячи команд на GPU каждый кадр (постоянный лаг). Перерисовка при смене
+	# видимой области делается в _process (_check_draw_cull).
+	var cam := get_viewport().get_camera_2d()
+	if cam == null or tile_size <= 0:
+		return [0, grid_cols, 0, grid_rows]
+	var center := cam.get_screen_center_position()
+	var vis := Vector2(get_viewport().get_visible_rect().size)
+	var half := vis * 0.5 / cam.zoom
+	var c0 := clampi(int((center.x - half.x) / tile_size) - 3, 0, grid_cols)
+	var c1 := clampi(int((center.x + half.x) / tile_size) + 3, 0, grid_cols)
+	var r0 := clampi(int((center.y - half.y) / tile_size) - 3, 0, grid_rows)
+	var r1 := clampi(int((center.y + half.y) / tile_size) + 3, 0, grid_rows)
+	return [c0, c1, r0, r1]
+
+var _last_draw_vr: Array = [-1, -1, -1, -1]
+
+func _check_draw_cull() -> void:
+	# Перерисовываем комнату только когда видимая область тайлов сменилась
+	var vr = _get_visible_tile_range()
+	if vr != _last_draw_vr:
+		_last_draw_vr = vr
+		queue_redraw()
 
 func _draw_wall_background():
 	# Полупрозрачная заливка — параллакс-фон должен просвечивать сквозь неё
