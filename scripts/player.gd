@@ -720,7 +720,12 @@ func _process(delta):
 
 	# Ledge grab — just hang, wait for player input (handled in _physics_process)
 
-	queue_redraw()
+	# Перерисовка спрайта через кадр (30 Гц) — для пиксель-арта незаметно,
+	# а _draw игрока тяжёлый (~150 вызовов). Позиция двигается трансформом
+	# каждый физ-кадр, так что движение остаётся плавным.
+	# Ключевые события (урон, атака, рывок) делают queue_redraw() сами.
+	if Engine.get_process_frames() % 2 == 0:
+		queue_redraw()
 
 var _cached_room: Node2D = null
 

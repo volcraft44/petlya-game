@@ -380,49 +380,33 @@ func _create_player():
 	remote.remote_path = camera.get_path()
 	player.add_child(remote)
 
-	# === Светильник игрока: 4-слойный bloom-сэндвич ===
-	# 1) Outer bloom — огромное мягкое свечение далеко вокруг
-	var bloom_outer = PointLight2D.new()
-	bloom_outer.color = Color(0.75, 0.50, 0.85)
-	bloom_outer.energy = 0.55
-	bloom_outer.texture = _create_light_texture()
-	bloom_outer.texture_scale = 4.5
-	bloom_outer.position = Vector2(0, -10)
-	bloom_outer.shadow_enabled = false
-	bloom_outer.blend_mode = Light2D.BLEND_MODE_ADD
-	player.add_child(bloom_outer)
+	# === Светильник игрока (оптимизировано) ===
+	# Огромный outer-bloom (scale 4.5) и аура убраны — в 2D каждый свет
+	# перерисовывает все пиксели в радиусе, а гигантский свет = просадки на
+	# слабых GPU/телефонах. Оставляем рабочий свет; halo — только на ПК.
+	var low_end := OS.has_feature("mobile")
 
-	# 2) Inner bloom — пинково-кремовый halo
-	var bloom_inner = PointLight2D.new()
-	bloom_inner.color = Color(1.0, 0.78, 0.85)
-	bloom_inner.energy = 0.85
-	bloom_inner.texture = _create_light_texture()
-	bloom_inner.texture_scale = 2.6
-	bloom_inner.position = Vector2(0, -10)
-	bloom_inner.shadow_enabled = false
-	bloom_inner.blend_mode = Light2D.BLEND_MODE_ADD
-	player.add_child(bloom_inner)
-
-	# 3) Рабочий свет — освещает мир в ближнем радиусе
 	var player_light = PointLight2D.new()
-	player_light.color = Color(1.0, 0.92, 0.95)
-	player_light.energy = 1.10
+	player_light.color = Color(1.0, 0.90, 0.92)
+	player_light.energy = 1.15
 	player_light.texture = _create_light_texture()
-	player_light.texture_scale = 1.5
+	player_light.texture_scale = 2.0
 	player_light.position = Vector2(0, -10)
 	player_light.shadow_enabled = false
 	player_light.blend_mode = Light2D.BLEND_MODE_ADD
 	player.add_child(player_light)
 
-	# 4) Ядро-аура (фиолетовая, обрисовывает силуэт)
-	var aura = PointLight2D.new()
-	aura.color = Color(0.65, 0.55, 0.95)
-	aura.energy = 0.60
-	aura.texture = _create_light_texture()
-	aura.texture_scale = 0.55
-	aura.position = Vector2(0, -10)
-	aura.shadow_enabled = false
-	player.add_child(aura)
+	if not low_end:
+		# Мягкое halo только на ПК — один доп. свет среднего радиуса
+		var bloom_inner = PointLight2D.new()
+		bloom_inner.color = Color(0.95, 0.72, 0.85)
+		bloom_inner.energy = 0.70
+		bloom_inner.texture = _create_light_texture()
+		bloom_inner.texture_scale = 3.0
+		bloom_inner.position = Vector2(0, -10)
+		bloom_inner.shadow_enabled = false
+		bloom_inner.blend_mode = Light2D.BLEND_MODE_ADD
+		player.add_child(bloom_inner)
 
 	hud.update_health(player.health, player.max_health)
 

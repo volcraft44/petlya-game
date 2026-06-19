@@ -7,23 +7,19 @@ var light: PointLight2D
 var on_wall_right: bool = false  # which side of wall
 var color: Color = Color(0.95, 0.75, 0.85)  # пастельный pinker — dream-pop
 
-func _ready():
-	# Bloom-ореол (большой, мягкий)
-	var bloom = PointLight2D.new()
-	bloom.color = color
-	bloom.energy = 0.35
-	bloom.texture = _create_light_texture()
-	bloom.texture_scale = 4.2
-	bloom.shadow_enabled = false
-	bloom.blend_mode = Light2D.BLEND_MODE_ADD
-	add_child(bloom)
+var _low_end: bool = false
 
-	# Основной свет
+func _ready():
+	_low_end = OS.has_feature("mobile")
+
+	# Большой bloom-ореол (scale 4.2) убран — при множестве факелов это были
+	# десятки перекрывающихся больших источников = просадки. Оставляем один
+	# основной свет на факел (на ПК чуть больше радиус, на телефоне меньше).
 	light = PointLight2D.new()
 	light.color = color
 	light.energy = base_energy
 	light.texture = _create_light_texture()
-	light.texture_scale = 2.5
+	light.texture_scale = 2.2 if _low_end else 2.8
 	light.shadow_enabled = false
 	add_child(light)
 
@@ -64,15 +60,18 @@ func _process(delta):
 						break
 		_fear = target_fear
 
-	var flicker = sin(flicker_timer * 8 + flicker_offset) * 0.15 + sin(flicker_timer * 13 + flicker_offset * 2) * 0.1
-	# Когда рядом монстр — факел нервно мигает и тускнеет
-	if _fear > 0.01:
-		var panic = sin(flicker_timer * 30.0) * 0.25 * _fear
-		light.energy = base_energy * (1.0 - _fear * 0.45) + flicker + panic
-		light.texture_scale = (2.5 + flicker * 0.3) * (1.0 - _fear * 0.2)
-	else:
-		light.energy = base_energy + flicker
-		light.texture_scale = 2.5 + flicker * 0.3
+	# Обновляем свет не каждый кадр — смена texture_scale заставляет свет
+	# перерисовываться, а мерцание глазом не отличить на 20 Гц.
+	var base_scale := 2.2 if _low_end else 2.8
+	if Engine.get_process_frames() % 3 == 0:
+		var flicker = sin(flicker_timer * 8 + flicker_offset) * 0.15 + sin(flicker_timer * 13 + flicker_offset * 2) * 0.1
+		if _fear > 0.01:
+			var panic = sin(flicker_timer * 30.0) * 0.25 * _fear
+			light.energy = base_energy * (1.0 - _fear * 0.45) + flicker + panic
+			light.texture_scale = (base_scale + flicker * 0.3) * (1.0 - _fear * 0.2)
+		else:
+			light.energy = base_energy + flicker
+			light.texture_scale = base_scale + flicker * 0.3
 
 	# Redraw — каждый 4-й кадр (god rays/марево медленные, разница не видна)
 	if Engine.get_process_frames() % 4 == 0:
