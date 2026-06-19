@@ -2561,63 +2561,51 @@ func _start_music():
 
 var music_tension: float = 0.0   # 0=спокойно, 1=бой. Плавно меняется.
 
+# Заранее сгенерированная 8-сек петля музыки (бесшовная: все частоты дают
+# целое число циклов за 8с). Раньше музыка синтезировалась КАЖДЫЙ кадр —
+# тысячи sin/exp на кадр в GDScript = постоянные просадки на телефоне и
+# старых ПК. Теперь генерим один раз на биом и просто копируем сэмплы.
+var _music_loop: PackedVector2Array = PackedVector2Array()
+var _music_loop_idx: int = 0
+var _music_loop_biome: int = -1
+
+func _generate_music_loop(biome: int) -> PackedVector2Array:
+	var sr := 22050.0
+	var loop_secs := 8.0
+	var total := int(sr * loop_secs)
+	var base_hz: float = [110.0, 98.0, 123.5, 92.5][biome]
+	var buf := PackedVector2Array()
+	buf.resize(total)
+	for i in total:
+		var t := float(i) / sr
+		var d1 := sin(t * base_hz * TAU) * 0.06
+		var d2 := sin(t * base_hz * 1.5 * TAU) * 0.035
+		var beat := fmod(t, 4.0)
+		var pad := sin(t * base_hz * 2.0 * TAU) * (exp(-beat * 0.4) * 0.04)
+		var hi_beat := fmod(t, 8.0)
+		var hi := sin(t * base_hz * 4.0 * TAU) * exp(-hi_beat * 1.5) * 0.025
+		var wind := (sin(t * 0.7) * 0.5 + 0.5) * sin(t * 311.3) * 0.010
+		var s := d1 + d2 + pad + hi + wind
+		buf[i] = Vector2(s, s)
+	return buf
+
 func _fill_music_buffer():
 	if not music_pb or not is_instance_valid(music_ap): return
 	var frames = music_pb.get_frames_available()
 	if frames < 64: return
-	var sr = 22050.0
-	# Biome melody (base note changes every 4 levels)
+	# Перегенерируем петлю только при смене биома (раз в 4 уровня)
 	var biome = ((current_level - 1) / 4) % 4
-	var base_hz = [110.0, 98.0, 123.5, 92.5][biome]  # A2 / G2 / B2 / F#2
-
-	# === Динамическое напряжение: считаем живых врагов рядом ===
-	var target_tension = 0.0
-	if current_room and is_instance_valid(current_room) and "enemies" in current_room \
-		and player and is_instance_valid(player):
-		var threat = 0
-		for en in current_room.enemies:
-			if is_instance_valid(en):
-				var d = player.global_position.distance_to(en.global_position)
-				if d < 350.0:
-					threat += 1
-		target_tension = clampf(float(threat) / 4.0, 0.0, 1.0)
-	# Плавно подтягиваем tension к цели
-	music_tension = lerpf(music_tension, target_tension, 0.04)
-
+	if biome != _music_loop_biome or _music_loop.is_empty():
+		_music_loop = _generate_music_loop(biome)
+		_music_loop_biome = biome
+		_music_loop_idx = 0
+	# Просто копируем сэмплы из петли (без синтеза) — почти бесплатно
+	var n := _music_loop.size()
 	for i in frames:
-		var t = music_time + float(i) / sr
-		# Slow deep drone
-		var d1 = sin(t * base_hz * TAU) * 0.06
-		var d2 = sin(t * base_hz * 1.5 * TAU) * 0.035  # fifth above
-		# Subtle pad
-		var beat = fmod(t, 4.0)
-		var pad_env = exp(-beat * 0.4) * 0.04
-		var pad = sin(t * base_hz * 2.0 * TAU) * pad_env
-		# Very occasional high note
-		var hi_beat = fmod(t, 8.0)
-		var hi = sin(t * base_hz * 4.0 * TAU) * exp(-hi_beat * 1.5) * 0.025
-		var s = d1 + d2 + pad + hi
-
-		# === COMBAT LAYER (добавляется по мере роста tension) ===
-		if music_tension > 0.02:
-			# Пульсирующий бас — "сердцебиение" боя, 2 удара/сек
-			var pulse_beat = fmod(t, 0.5)
-			var pulse_env = exp(-pulse_beat * 10.0)
-			var combat_bass = sin(t * base_hz * 0.5 * TAU) * pulse_env * 0.10 * music_tension
-			# Тревожный диссонанс — малая секунда сверху
-			var tense_note = sin(t * base_hz * 2.12 * TAU) * 0.03 * music_tension
-			# Лёгкий хай-хэт-шум на пульсе
-			var hat = 0.0
-			if pulse_beat < 0.04:
-				hat = randf_range(-1, 1) * 0.03 * music_tension
-			s += combat_bass + tense_note + hat
-
-		# === AMBIENT слой — тихий ветер (всегда) ===
-		var wind = (sin(t * 0.7) * 0.5 + 0.5) * randf_range(-1, 1) * 0.012
-		s += wind
-
-		music_pb.push_frame(Vector2(s, s))
-	music_time += float(frames) / sr
+		music_pb.push_frame(_music_loop[_music_loop_idx])
+		_music_loop_idx += 1
+		if _music_loop_idx >= n:
+			_music_loop_idx = 0
 
 func _load_tutorial_level():
 	# Simple hand-built tutorial room teaching: roll, wall climb, platform
