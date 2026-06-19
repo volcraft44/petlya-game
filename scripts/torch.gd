@@ -12,16 +12,17 @@ var _low_end: bool = false
 func _ready():
 	_low_end = OS.has_feature("mobile")
 
-	# Большой bloom-ореол (scale 4.2) убран — при множестве факелов это были
-	# десятки перекрывающихся больших источников = просадки. Оставляем один
-	# основной свет на факел (на ПК чуть больше радиус, на телефоне меньше).
-	light = PointLight2D.new()
-	light.color = color
-	light.energy = base_energy
-	light.texture = _create_light_texture()
-	light.texture_scale = 2.2 if _low_end else 2.8
-	light.shadow_enabled = false
-	add_child(light)
+	# На телефоне свет факела ВЫКЛЮЧЕН полностью — при 6–10 факелах это были
+	# десятки перекрывающихся источников. Остаётся только рисованное пламя
+	# (сцена и так светлая через ambient). На ПК — один свет на факел.
+	if not _low_end:
+		light = PointLight2D.new()
+		light.color = color
+		light.energy = base_energy
+		light.texture = _create_light_texture()
+		light.texture_scale = 2.8
+		light.shadow_enabled = false
+		add_child(light)
 
 	flicker_offset = randf() * 100.0
 
@@ -62,8 +63,9 @@ func _process(delta):
 
 	# Обновляем свет не каждый кадр — смена texture_scale заставляет свет
 	# перерисовываться, а мерцание глазом не отличить на 20 Гц.
-	var base_scale := 2.2 if _low_end else 2.8
-	if Engine.get_process_frames() % 3 == 0:
+	# На телефоне света нет (light == null) — пропускаем.
+	var base_scale := 2.8
+	if light != null and Engine.get_process_frames() % 3 == 0:
 		var flicker = sin(flicker_timer * 8 + flicker_offset) * 0.15 + sin(flicker_timer * 13 + flicker_offset * 2) * 0.1
 		if _fear > 0.01:
 			var panic = sin(flicker_timer * 30.0) * 0.25 * _fear

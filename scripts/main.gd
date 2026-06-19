@@ -129,6 +129,17 @@ var loop_messages: Array = [
 # Global darkness overlay
 var darkness: CanvasModulate
 
+# Низкое железо (телефон): на нём выключаем весь динамический свет —
+# главный пожиратель FPS в 2D — и держим сцену яркой через ambient.
+var _low_end: bool = OS.has_feature("mobile")
+
+# Ставит цвет CanvasModulate. На телефоне свет выключен, поэтому держим
+# сцену достаточно светлой (иначе без источников света было бы черно).
+func _ambient(col: Color) -> Color:
+	if _low_end:
+		return Color(0.62, 0.56, 0.66)
+	return col
+
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS  # Process even when paused (for ESC menu)
 	# FPS-лимит по платформе: телефон — 60 (экономия батареи/GPU), ПК — 120
@@ -151,7 +162,7 @@ func _ready():
 
 	# Тёмный лиловый сумрак — атмосферно но не светло.
 	darkness = CanvasModulate.new()
-	darkness.color = Color(0.07, 0.06, 0.10)
+	darkness.color = _ambient(Color(0.07, 0.06, 0.10))
 	add_child(darkness)
 
 	# HUD
@@ -390,23 +401,20 @@ func _create_player():
 	player.add_child(remote)
 
 	# === Светильник игрока (оптимизировано) ===
-	# Огромный outer-bloom (scale 4.5) и аура убраны — в 2D каждый свет
-	# перерисовывает все пиксели в радиусе, а гигантский свет = просадки на
-	# слабых GPU/телефонах. Оставляем рабочий свет; halo — только на ПК.
-	var low_end := OS.has_feature("mobile")
+	# На телефоне свет ПОЛНОСТЬЮ выключен (ambient поднят в _ambient) — это
+	# убирает весь овердров от света, главный пожиратель FPS в 2D.
+	# На ПК — рабочий свет + мягкое halo (огромный bloom и аура убраны).
+	if not _low_end:
+		var player_light = PointLight2D.new()
+		player_light.color = Color(1.0, 0.90, 0.92)
+		player_light.energy = 1.15
+		player_light.texture = _create_light_texture()
+		player_light.texture_scale = 2.0
+		player_light.position = Vector2(0, -10)
+		player_light.shadow_enabled = false
+		player_light.blend_mode = Light2D.BLEND_MODE_ADD
+		player.add_child(player_light)
 
-	var player_light = PointLight2D.new()
-	player_light.color = Color(1.0, 0.90, 0.92)
-	player_light.energy = 1.15
-	player_light.texture = _create_light_texture()
-	player_light.texture_scale = 2.0
-	player_light.position = Vector2(0, -10)
-	player_light.shadow_enabled = false
-	player_light.blend_mode = Light2D.BLEND_MODE_ADD
-	player.add_child(player_light)
-
-	if not low_end:
-		# Мягкое halo только на ПК — один доп. свет среднего радиуса
 		var bloom_inner = PointLight2D.new()
 		bloom_inner.color = Color(0.95, 0.72, 0.85)
 		bloom_inner.energy = 0.70
@@ -640,7 +648,7 @@ func _load_room():
 
 	# Лиминал-сумрак тёмный: с уровнем чуть глуше
 	var dark_factor = maxf(0.04, 0.08 - current_level * 0.004)
-	darkness.color = Color(dark_factor * 0.85, dark_factor * 0.75, dark_factor * 1.20)
+	darkness.color = _ambient(Color(dark_factor * 0.85, dark_factor * 0.75, dark_factor * 1.20))
 
 	hud.update_level(current_level)
 	hud.update_enemies(current_room.enemies.size())
@@ -2402,7 +2410,7 @@ func _load_future_arena():
 	hud.update_health(player.health, player.max_health)
 
 	# Special dark purple atmosphere
-	darkness.color = Color(0.08, 0.04, 0.12)
+	darkness.color = _ambient(Color(0.08, 0.04, 0.12))
 
 	# Spawn future self on the right
 	# floor is at grid row (grid_rows - 5), so pixel Y = (grid_rows - 5) * 16
@@ -2663,4 +2671,4 @@ func _load_tutorial_level():
 	])
 
 	# Set room brightness for tutorial
-	darkness.color = Color(0.3, 0.28, 0.25)
+	darkness.color = _ambient(Color(0.3, 0.28, 0.25))
