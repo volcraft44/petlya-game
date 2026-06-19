@@ -596,6 +596,14 @@ func _physics_process(delta):
 	if shocked_timer > 0.0:
 		shocked_timer -= delta
 
+	# Сон ИИ вне экрана: враги далеко от игрока (видимая зона ~220px) не считают
+	# ИИ — большая экономия CPU в комнатах с толпой. Гравитация и оседание на
+	# пол остаются, чтобы никто не провалился. Боссы/минибоссы не спят.
+	if player and is_instance_valid(player) and not is_miniboss:
+		if global_position.distance_squared_to(player.global_position) > 900.0 * 900.0:
+			move_and_slide()
+			return
+
 	# === ELITE поведение ===
 	if elite_affix != "":
 		_elite_pulse += delta
