@@ -4003,16 +4003,20 @@ func _get_visible_tile_range() -> Array:
 	# по всей комнате. Раньше возвращался весь грид — и room._draw отправлял
 	# тысячи команд на GPU каждый кадр (постоянный лаг). Перерисовка при смене
 	# видимой области делается в _process (_check_draw_cull).
-	var cam := get_viewport().get_camera_2d()
-	if cam == null or tile_size <= 0:
+	if tile_size <= 0:
 		return [0, grid_cols, 0, grid_rows]
-	var center := cam.get_screen_center_position()
-	var vis := Vector2(get_viewport().get_visible_rect().size)
-	var half := vis * 0.5 / cam.zoom
-	var c0 := clampi(int((center.x - half.x) / tile_size) - 3, 0, grid_cols)
-	var c1 := clampi(int((center.x + half.x) / tile_size) + 3, 0, grid_cols)
-	var r0 := clampi(int((center.y - half.y) / tile_size) - 3, 0, grid_rows)
-	var r1 := clampi(int((center.y + half.y) / tile_size) + 3, 0, grid_rows)
+	# Центр — позиция игрока (надёжнее get_camera_2d, который мог быть null).
+	var center: Vector2
+	if player_ref and is_instance_valid(player_ref):
+		center = player_ref.global_position
+	else:
+		return [0, grid_cols, 0, grid_rows]
+	var halfx := 260.0
+	var halfy := 170.0
+	var c0 := clampi(int((center.x - halfx) / tile_size), 0, grid_cols)
+	var c1 := clampi(int((center.x + halfx) / tile_size) + 1, 0, grid_cols)
+	var r0 := clampi(int((center.y - halfy) / tile_size), 0, grid_rows)
+	var r1 := clampi(int((center.y + halfy) / tile_size) + 1, 0, grid_rows)
 	return [c0, c1, r0, r1]
 
 var _last_draw_vr: Array = [-1, -1, -1, -1]

@@ -35,26 +35,21 @@ func _compute_visible_range() -> Rect2i:
 	var ts: int = room.tile_size
 	if ts <= 0:
 		return Rect2i(0, 0, room.grid_cols, room.grid_rows)
-	var cam := get_viewport().get_camera_2d()
+	# Центр — позиция игрока (камера следует за ним). Это надёжнее, чем
+	# get_camera_2d(), который мог возвращать null → рисовалась вся комната.
 	var center: Vector2
-	var zoom := Vector2(2.9, 2.9)
-	if cam:
-		center = cam.get_screen_center_position()
-		zoom = cam.zoom
+	var p = room.player_ref
+	if p and is_instance_valid(p):
+		center = p.global_position
 	else:
-		# Камеры пока нет — берём весь видимый размер от центра комнаты
 		center = Vector2(room.room_width, room.room_height) * 0.5
-	var vis := Vector2(get_viewport().get_visible_rect().size)
-	var half := vis * 0.5 / zoom
-	# +3 тайла запаса по краям, чтобы не было «выезжающих» границ
-	var x0 := int((center.x - half.x) / ts) - 3
-	var x1 := int((center.x + half.x) / ts) + 3
-	var y0 := int((center.y - half.y) / ts) - 3
-	var y1 := int((center.y + half.y) / ts) + 3
-	x0 = clampi(x0, 0, room.grid_cols)
-	x1 = clampi(x1, 0, room.grid_cols)
-	y0 = clampi(y0, 0, room.grid_rows)
-	y1 = clampi(y1, 0, room.grid_rows)
+	# Видимая полузона при зуме 2.9 ≈ 220x132px. Берём с запасом (lookahead).
+	var halfx := 260.0
+	var halfy := 170.0
+	var x0 := clampi(int((center.x - halfx) / ts), 0, room.grid_cols)
+	var x1 := clampi(int((center.x + halfx) / ts) + 1, 0, room.grid_cols)
+	var y0 := clampi(int((center.y - halfy) / ts), 0, room.grid_rows)
+	var y1 := clampi(int((center.y + halfy) / ts) + 1, 0, room.grid_rows)
 	return Rect2i(x0, y0, x1 - x0, y1 - y0)
 
 func _draw() -> void:
