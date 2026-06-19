@@ -133,6 +133,15 @@ func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS  # Process even when paused (for ESC menu)
 	# FPS-лимит по платформе: телефон — 60 (экономия батареи/GPU), ПК — 120
 	Engine.max_fps = 60 if OS.has_feature("mobile") else 120
+	# На телефоне рендерим в БАЗОВОМ разрешении 1280x768 и растягиваем на экран.
+	# С режимом canvas_items игра рисовалась в родном разрешении телефона
+	# (1080p–1440p) — в 2–6 раз больше пикселей и нагрузки на заполнение.
+	# Режим viewport убирает это — главный выигрыш FPS на телефоне.
+	if OS.has_feature("mobile"):
+		var win := get_window()
+		win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+		win.content_scale_size = Vector2i(1280, 768)
 	# Camera
 	camera = Camera2D.new()
 	camera.zoom = Vector2(2.9, 2.9)  # HD: больше zoom т.к. viewport 1280x768

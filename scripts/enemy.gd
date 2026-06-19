@@ -562,16 +562,18 @@ func _process(delta):
 	# Элита анимирует ауру — но через кадр (хватает для глаза)
 	if elite_affix != "" and Engine.get_process_frames() % 2 == 0:
 		needs_draw = true
-	# Enemies with animated programmatic draws always need redraw
-	if enemy_class in [EnemyClass.FLY, EnemyClass.STEALTH, EnemyClass.MAGE,
+	# Enemies with animated programmatic draws — перерисовка через кадр (30 Гц).
+	# Для пиксель-арта незаметно, но вдвое дешевле при толпе врагов.
+	if Engine.get_process_frames() % 2 == 0 and enemy_class in [EnemyClass.FLY, EnemyClass.STEALTH, EnemyClass.MAGE,
 			EnemyClass.SPIDER, EnemyClass.SUMMONER, EnemyClass.RAT,
 			EnemyClass.MUMMY, EnemyClass.BEETLE, EnemyClass.MOSQUITO,
 			EnemyClass.ZOMBIE_CORPSE, EnemyClass.KNIGHT, EnemyClass.HERETIC,
 			EnemyClass.DOG]:
 		needs_draw = true
-	# Distance culling: skip redraw for enemies far off-screen (~750px from player)
+	# Distance culling: видимая зона ~220px (зум 2.9), 360px — уже за экраном.
+	# Враги дальше не перерисовываются вообще.
 	if needs_draw and player and is_instance_valid(player):
-		if global_position.distance_squared_to(player.global_position) > 750.0 * 750.0:
+		if global_position.distance_squared_to(player.global_position) > 360.0 * 360.0:
 			needs_draw = false
 	if needs_draw:
 		queue_redraw()

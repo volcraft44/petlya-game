@@ -1869,10 +1869,15 @@ func update_coins(n: int):
 	draw_node.queue_redraw()
 
 func update_progression(level: int, xp_val: int, xp_max: int):
+	# Раньше тут был безусловный queue_redraw, а main зовёт это КАЖДЫЙ кадр —
+	# из-за чего весь HUD (~360 операций) рисовался 60 раз/сек. Перерисовку
+	# и так делает throttle в _process (30 Гц); тут редроим только при
+	# реальном изменении значений.
+	if level == char_level and xp_val == xp and xp_max == xp_needed:
+		return
 	char_level = level
 	xp = xp_val
 	xp_needed = xp_max
-	draw_node.queue_redraw()
 
 func show_combo(count: int):
 	combo_count = count
