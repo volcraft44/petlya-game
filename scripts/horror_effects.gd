@@ -539,27 +539,34 @@ func _start_glitch_hit() -> void:
 
 func _on_draw() -> void:
 	var vs = _viewport_size()
-	# Кинематографический ambient — рисуется ПОД всем остальным
-	_draw_cinematic(vs)
-	# Психоделический слой
-	_draw_psychedelic(vs)
+	# Ambient-постобработка (кинематик-фильтр, психоделия, VHS) УБРАНА:
+	# она рисовала ~250 прямоугольников КАЖДЫЙ кадр поверх всего экрана —
+	# это главный источник лагов, и цветные фильтры были не к месту.
+	# Оставляем только лёгкую виньетку и осмысленные хоррор-вспышки.
 	_draw_vignette(vs)
+	var any_active := false
 	if _eyes.size() > 0:
 		_draw_eyes()
+		any_active = true
 	if _echo_t >= 0.0:
 		_draw_echo()
+		any_active = true
 	if _sil_t >= 0.0:
 		_draw_silhouette(vs)
+		any_active = true
 	if _glitch_hit_t >= 0.0:
 		_draw_glitch(vs)
+		any_active = true
 	if _noexit_active and _noexit_t >= 0.0:
 		_draw_noexit(vs)
-	# VHS-эффект и UI рисуем САМЫМИ ПОСЛЕДНИМИ — поверх всего
-	_draw_vhs(vs)
+		any_active = true
 	if _whisper_t >= 0.0:
 		_draw_whisper(vs)
-	# Перерисовка каждый кадр для статика и трекинг-полосы
-	_draw_node.queue_redraw()
+		any_active = true
+	# Перерисовываем только пока активна анимация эффекта или трясётся окно.
+	# В покое HUD-оверлей статичен и не жрёт CPU/GPU.
+	if any_active or _win_shake_t >= 0.0:
+		_draw_node.queue_redraw()
 
 # ── Vignette ──────────────────────────────────────────────────────────────────
 func _draw_vignette(vs: Vector2) -> void:

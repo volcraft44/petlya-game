@@ -565,7 +565,7 @@ func _process(delta):
 		if ft.tick <= 0:
 			ft.tick = 1.0
 			if is_instance_valid(ft.enemy) and ft.enemy.has_method("take_damage"):
-				ft.enemy.take_damage(2, Vector2.ZERO)
+				ft.enemy.take_damage(2 * ft.get("stacks", 1), Vector2.ZERO)  # урон x стаки
 		if ft.timer <= 0 or not is_instance_valid(ft.enemy):
 			if is_instance_valid(ft.enemy) and "is_on_fire" in ft.enemy:
 				ft.enemy.is_on_fire = false
@@ -585,7 +585,7 @@ func _process(delta):
 		if ct.tick <= 0:
 			ct.tick = 1.0
 			if is_instance_valid(ct.enemy) and ct.enemy.has_method("take_damage"):
-				ct.enemy.take_damage(4, Vector2.ZERO)
+				ct.enemy.take_damage(4 * ct.get("stacks", 1), Vector2.ZERO)  # урон x стаки
 		if ct.timer <= 0 or not is_instance_valid(ct.enemy):
 			if is_instance_valid(ct.enemy) and "is_poisoned" in ct.enemy:
 				ct.enemy.is_poisoned = false
@@ -722,13 +722,21 @@ func _process(delta):
 
 	queue_redraw()
 
+var _cached_room: Node2D = null
+
 func _find_room() -> Node2D:
-	# Room is a sibling node (child of main.gd), not our parent
+	# Кэшируем ссылку на комнату — раньше скан всех детей сцены делался
+	# до 17 раз за кадр, это давало просадки. Пересканируем только если
+	# кэш пуст или комната уничтожена (смена уровня).
+	if _cached_room != null and is_instance_valid(_cached_room):
+		return _cached_room
 	var parent = get_parent()
 	if parent:
 		for child in parent.get_children():
 			if child != self and child.has_method("get_ladder_at"):
+				_cached_room = child
 				return child
+	_cached_room = null
 	return null
 
 func stun(duration: float):
@@ -1736,9 +1744,10 @@ func _on_attack_hit(body) -> bool:
 			for ct in constrict_targets:
 				if ct.enemy == body:
 					ct.timer = 5.0  # Reset poison
+					ct.stacks = mini(ct.get("stacks", 1) + 1, 5)  # стак до x5
 					already = true
 			if not already:
-				constrict_targets.append({"enemy": body, "timer": 5.0, "tick": 1.0})
+				constrict_targets.append({"enemy": body, "timer": 5.0, "tick": 1.0, "stacks": 1})
 
 		# Death note — mark for death in 40s
 		if special == "death_note":
@@ -1784,10 +1793,11 @@ func _on_attack_hit(body) -> bool:
 			for ft in fire_targets:
 				if ft.enemy == body:
 					ft.timer = 10.0  # Reset fire duration
+					ft.stacks = mini(ft.get("stacks", 1) + 1, 5)  # стак до x5
 					already_burning = true
 					break
 			if not already_burning:
-				fire_targets.append({"enemy": body, "timer": 10.0, "tick": 1.0})
+				fire_targets.append({"enemy": body, "timer": 10.0, "tick": 1.0, "stacks": 1})
 
 		body.take_damage(dmg, knockback)
 		_spawn_damage_number(body.global_position, dmg, is_crit)
@@ -1879,15 +1889,23 @@ func _on_attack_hit(body) -> bool:
 				"poison":
 					var already_p = false
 					for ct in constrict_targets:
-						if ct.enemy == body: already_p = true; break
+						if ct.enemy == body:
+							ct.timer = 5.0
+							ct.stacks = mini(ct.get("stacks", 1) + 1, 5)
+							already_p = true
+							break
 					if not already_p:
-						constrict_targets.append({"enemy": body, "timer": 5.0, "tick": 1.0})
+						constrict_targets.append({"enemy": body, "timer": 5.0, "tick": 1.0, "stacks": 1})
 				"fire":
 					var already_f = false
 					for ft in fire_targets:
-						if ft.enemy == body: already_f = true; break
+						if ft.enemy == body:
+							ft.timer = 8.0
+							ft.stacks = mini(ft.get("stacks", 1) + 1, 5)
+							already_f = true
+							break
 					if not already_f:
-						fire_targets.append({"enemy": body, "timer": 8.0, "tick": 1.0})
+						fire_targets.append({"enemy": body, "timer": 8.0, "tick": 1.0, "stacks": 1})
 				"lifesteal":
 					heal(1)
 				"chain":
