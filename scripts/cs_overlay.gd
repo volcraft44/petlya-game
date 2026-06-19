@@ -135,10 +135,12 @@ func _process(delta: float) -> void:
 		style_points = max(0.0, style_points - _style_decay_base * decay_mult * delta)
 	if _rank_up_flash_t > 0.0:
 		_rank_up_flash_t -= delta
-	# Обновляем "actions" (логи)
-	for a in _style_actions:
-		a.life -= delta
-	_style_actions = _style_actions.filter(func(a): return a.life > 0.0)
+	# Обновляем "actions" (логи). .filter() создаёт лямбду+массив каждый вызов —
+	# пропускаем когда список пуст (обычный случай вне боя).
+	if _style_actions.size() > 0:
+		for a in _style_actions:
+			a.life -= delta
+		_style_actions = _style_actions.filter(func(a): return a.life > 0.0)
 
 	if _ace_t > 0.0:
 		_ace_t -= delta
@@ -150,17 +152,20 @@ func _process(delta: float) -> void:
 		if _inspect_t <= 0.0:
 			_inspect_t = -1.0
 
-	for h in _headshots:
-		h.t -= delta
-	_headshots = _headshots.filter(func(h): return h.t > 0.0)
+	if _headshots.size() > 0:
+		for h in _headshots:
+			h.t -= delta
+		_headshots = _headshots.filter(func(h): return h.t > 0.0)
 
 	# BHOP trail decay
-	for p in bhop_trail:
-		p.life -= delta
-	bhop_trail = bhop_trail.filter(func(p): return p.life > 0.0)
-	for pp in bhop_perfect_popups:
-		pp.t -= delta
-	bhop_perfect_popups = bhop_perfect_popups.filter(func(pp): return pp.t > 0.0)
+	if bhop_trail.size() > 0:
+		for p in bhop_trail:
+			p.life -= delta
+		bhop_trail = bhop_trail.filter(func(p): return p.life > 0.0)
+	if bhop_perfect_popups.size() > 0:
+		for pp in bhop_perfect_popups:
+			pp.t -= delta
+		bhop_perfect_popups = bhop_perfect_popups.filter(func(pp): return pp.t > 0.0)
 
 	if _scope_active:
 		_scope_t = minf(1.0, _scope_t + delta * 5.0)
