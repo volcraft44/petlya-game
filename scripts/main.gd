@@ -135,6 +135,7 @@ var _fps_label: Label
 var _fps_cd: float = 0.0
 var _main_proc_ms: float = 0.0
 var _music_ms: float = 0.0
+var _enemy_ms: float = 0.0
 
 # Низкое железо (телефон): на нём выключаем весь динамический свет —
 # главный пожиратель FPS в 2D — и держим сцену яркой через ambient.
@@ -1234,17 +1235,26 @@ func _end_insanity_sequence() -> void:
 
 func _process(delta):
 	var _t_main0 := Time.get_ticks_usec()
+	# Главный процесс идёт ПЕРВЫМ в кадре — читаем накопленное врагами за
+	# прошлый кадр и обнуляем.
+	var EnemyScript = load("res://scripts/enemy.gd")
+	_enemy_ms = EnemyScript.dbg_total_us / 1000.0
+	EnemyScript.dbg_total_us = 0
 	# Диагностика производительности (обновляем 4 раза/сек)
 	if _fps_label:
 		_fps_cd -= delta
 		if _fps_cd <= 0.0:
 			_fps_cd = 0.25
-			var draws = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
-			var nodes = Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
 			var proc_ms = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 			var phys_ms = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
-			_fps_label.text = "FPS:%d draws:%d nodes:%d\nproc:%.1f phys:%.1f | main:%.1f music:%.1f" % [
-				Engine.get_frames_per_second(), draws, nodes, proc_ms, phys_ms, _main_proc_ms, _music_ms]
+			var pl_ms := 0.0
+			if player and is_instance_valid(player):
+				pl_ms = player.dbg_proc_ms
+			var rm_ms := 0.0
+			if current_room and is_instance_valid(current_room):
+				rm_ms = current_room.dbg_proc_ms
+			_fps_label.text = "FPS:%d proc:%.1f phys:%.1f\nplayer:%.1f enemies:%.1f room:%.1f main:%.1f" % [
+				Engine.get_frames_per_second(), proc_ms, phys_ms, pl_ms, _enemy_ms, rm_ms, _main_proc_ms]
 	_update_camera_shake(delta)
 	_update_camera_lookahead(delta)
 	_update_cs_features(delta)

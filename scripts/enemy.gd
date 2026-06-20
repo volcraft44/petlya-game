@@ -449,7 +449,10 @@ func _setup_class():
 			dog_lunge_timer = 0.0
 			dog_howl_timer = randf_range(5.0, 10.0)
 
+static var dbg_total_us: int = 0
+
 func _process(delta):
+	var _et0 := Time.get_ticks_usec()
 	# Stun timer
 	if is_stunned:
 		stun_timer -= delta
@@ -461,6 +464,7 @@ func _process(delta):
 		if has_sprite_anim and enemy_sprite:
 			_update_sprite_anim(delta)
 		queue_redraw()
+		dbg_total_us += Time.get_ticks_usec() - _et0
 		return
 
 	if not can_attack:
@@ -577,6 +581,7 @@ func _process(delta):
 			needs_draw = false
 	if needs_draw:
 		queue_redraw()
+	dbg_total_us += Time.get_ticks_usec() - _et0
 
 func _physics_process(delta):
 	velocity.y += gravity * delta

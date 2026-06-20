@@ -476,7 +476,10 @@ func _ready():
 	collision_layer = 1
 	collision_mask = normal_collision_mask
 
+var dbg_proc_ms: float = 0.0
+
 func _process(delta):
+	var _dbg_t0 := Time.get_ticks_usec()
 	if is_dead:
 		return
 
@@ -726,6 +729,7 @@ func _process(delta):
 	# Ключевые события (урон, атака, рывок) делают queue_redraw() сами.
 	if Engine.get_process_frames() % 2 == 0:
 		queue_redraw()
+	dbg_proc_ms = (Time.get_ticks_usec() - _dbg_t0) / 1000.0
 
 var _cached_room: Node2D = null
 

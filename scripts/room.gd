@@ -2438,7 +2438,10 @@ func _spawn_door():
 	doors.append(door)
 	door.door_interact.connect(_on_door_interact)
 
+var dbg_proc_ms: float = 0.0
+
 func _process(delta):
+	var _dbg_t0 := Time.get_ticks_usec()
 	# Перерисовка комнаты только при смене видимой области (отсечение по камере).
 	# Босс-комнаты перерисовываются каждый кадр ниже, им это не нужно.
 	if not is_boss_room:
@@ -2754,6 +2757,7 @@ func _process(delta):
 
 	if horror_needs_redraw:
 		queue_redraw()
+	dbg_proc_ms = (Time.get_ticks_usec() - _dbg_t0) / 1000.0
 
 func _spawn_portal():
 	if not player_ref or not is_instance_valid(player_ref):
