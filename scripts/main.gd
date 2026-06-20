@@ -129,13 +129,6 @@ var loop_messages: Array = [
 # Global darkness overlay
 var darkness: CanvasModulate
 
-# FPS-счётчик
-var _fps_layer: CanvasLayer
-var _fps_label: Label
-var _fps_cd: float = 0.0
-var _main_proc_ms: float = 0.0
-var _music_ms: float = 0.0
-var _enemy_ms: float = 0.0
 
 # Низкое железо (телефон): на нём выключаем весь динамический свет —
 # главный пожиратель FPS в 2D — и держим сцену яркой через ambient.
@@ -173,18 +166,6 @@ func _ready():
 	darkness = CanvasModulate.new()
 	darkness.color = _ambient(Color(0.07, 0.06, 0.10))
 	add_child(darkness)
-
-	# Счётчик FPS (верхний левый угол) — для контроля производительности
-	_fps_layer = CanvasLayer.new()
-	_fps_layer.layer = 200
-	add_child(_fps_layer)
-	_fps_label = Label.new()
-	_fps_label.position = Vector2(8, 6)
-	_fps_label.add_theme_font_size_override("font_size", 18)
-	_fps_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
-	_fps_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-	_fps_label.add_theme_constant_override("outline_size", 4)
-	_fps_layer.add_child(_fps_label)
 
 	# HUD
 	var hud_script = load("res://scripts/hud.gd")
@@ -1234,27 +1215,6 @@ func _end_insanity_sequence() -> void:
 # ───────────────────────────────────────────────────────────────────────────
 
 func _process(delta):
-	var _t_main0 := Time.get_ticks_usec()
-	# Главный процесс идёт ПЕРВЫМ в кадре — читаем накопленное врагами за
-	# прошлый кадр и обнуляем.
-	var EnemyScript = load("res://scripts/enemy.gd")
-	_enemy_ms = EnemyScript.dbg_total_us / 1000.0
-	EnemyScript.dbg_total_us = 0
-	# Диагностика производительности (обновляем 4 раза/сек)
-	if _fps_label:
-		_fps_cd -= delta
-		if _fps_cd <= 0.0:
-			_fps_cd = 0.25
-			var proc_ms = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
-			var phys_ms = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
-			var pl_ms := 0.0
-			if player and is_instance_valid(player):
-				pl_ms = player.dbg_proc_ms
-			var rm_ms := 0.0
-			if current_room and is_instance_valid(current_room):
-				rm_ms = current_room.dbg_proc_ms
-			_fps_label.text = "FPS:%d proc:%.1f phys:%.1f\nplayer:%.1f enemies:%.1f room:%.1f main:%.1f" % [
-				Engine.get_frames_per_second(), proc_ms, phys_ms, pl_ms, _enemy_ms, rm_ms, _main_proc_ms]
 	_update_camera_shake(delta)
 	_update_camera_lookahead(delta)
 	_update_cs_features(delta)
@@ -1308,10 +1268,8 @@ func _process(delta):
 			else:
 				death_draw_node.queue_redraw()
 
-	# Background music — keep buffer filled (с замером времени)
-	var _tm0 := Time.get_ticks_usec()
+	# Background music — keep buffer filled
 	_fill_music_buffer()
-	_music_ms = (Time.get_ticks_usec() - _tm0) / 1000.0
 	# Sync progression display each frame (lightweight)
 	if player and is_instance_valid(player):
 		hud.update_progression(player.char_level, player.xp, player.xp_needed)
@@ -1329,8 +1287,6 @@ func _process(delta):
 			else:
 				player.position = Vector2(60, current_room.floor_y - 10)
 			player.velocity = Vector2.ZERO
-
-	_main_proc_ms = (Time.get_ticks_usec() - _t_main0) / 1000.0
 
 func _update_cs_features(delta: float):
 	if not cs_overlay or not player or not is_instance_valid(player):
