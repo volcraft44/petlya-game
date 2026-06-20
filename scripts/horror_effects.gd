@@ -234,48 +234,10 @@ func _process(delta: float) -> void:
 	_hue_phase += delta * 0.06       # очень медленно вращается hue
 	_sacred_t += delta
 
-	# Lazy-init фоновые элементы при первом process
 	var vs_init = _viewport_size()
-	if _float_cubes.is_empty():
-		for i in 8:
-			_float_cubes.append({
-				"x": randf() * vs_init.x,
-				"y": randf() * vs_init.y,
-				"size": randf_range(8.0, 22.0),
-				"vx": randf_range(-6.0, 6.0),
-				"vy": randf_range(-3.0, 3.0),
-				"rot": randf() * TAU,
-				"vrot": randf_range(-0.3, 0.3),
-				"hue_phase": randf() * TAU,
-			})
-	if _stars.is_empty():
-		for i in 40:
-			_stars.append({
-				"x": randf() * vs_init.x,
-				"y": randf() * vs_init.y,
-				"alpha": randf_range(0.15, 0.55),
-				"phase": randf() * TAU,
-			})
-	# Двигаем кубы
-	for c in _float_cubes:
-		c.x += c.vx * delta
-		c.y += c.vy * delta
-		c.rot += c.vrot * delta
-		if c.x < -40: c.x = vs_init.x + 40
-		if c.x > vs_init.x + 40: c.x = -40
-		if c.y < -40: c.y = vs_init.y + 40
-		if c.y > vs_init.y + 40: c.y = -40
-
-	# Rainbow waves
-	if _rainbow_t < 0.0:
-		_rainbow_cd -= delta
-		if _rainbow_cd <= 0.0:
-			_rainbow_t = 2.5  # длительность волны
-			_rainbow_cd = randf_range(30.0, 60.0)
-	else:
-		_rainbow_t -= delta
-		if _rainbow_t < 0.0:
-			_rainbow_t = -1.0
+	# Плавающие кубы / звёзды / радуга больше НЕ рисуются (ambient-постобработка
+	# убрана ради FPS), поэтому их обновление — пустая трата. Полностью
+	# пропускаем расчёт.
 
 	# Acid flash
 	if _acid_t < 0.0:

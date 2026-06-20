@@ -180,8 +180,9 @@ func _process(delta: float) -> void:
 	if _case_active:
 		_update_case(delta)
 
-	# Throttle: рисуем через кадр — экономия CPU
-	if Engine.get_process_frames() % 2 == 0:
+	# Throttle: ПК 30 Гц, телефон 15 Гц — экономия CPU на слабом железе
+	var _step := 4 if OS.has_feature("mobile") else 2
+	if Engine.get_process_frames() % _step == 0:
 		_draw_node.queue_redraw()
 
 

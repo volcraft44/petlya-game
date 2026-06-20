@@ -95,8 +95,9 @@ func set_camera(cam: Camera2D) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	# Throttle: фон обновляем 30 раз/сек — параллакс всё равно медленный
-	if Engine.get_process_frames() % 3 == 0:
+	# Throttle: ПК ~20 Гц, телефон ~10 Гц — параллакс медленный, разницы нет
+	var _step := 6 if OS.has_feature("mobile") else 3
+	if Engine.get_process_frames() % _step == 0:
 		_draw_node.queue_redraw()
 
 func _on_draw() -> void:

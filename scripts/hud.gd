@@ -1,5 +1,7 @@
 extends CanvasLayer
 
+var _hud_low_end: bool = OS.has_feature("mobile")
+
 var health_max: int = 100
 var health_current: int = 100
 var current_level: int = 1
@@ -20,6 +22,7 @@ var _hp_rng_edge: RandomNumberGenerator = RandomNumberGenerator.new()
 var _mm_texture: ImageTexture = null
 var _mm_image: Image = null
 var _mm_explored_count: int = -1     # сравниваем количество исследованных тайлов
+var _mm_recount_cd: float = 0.0      # троттл пересчёта explored для миникарты
 var _mm_cached_cols: int = 0
 var _mm_cached_rows: int = 0
 
@@ -154,42 +157,41 @@ func _process(delta):
 	if _hp_hit_flash > 0.0:
 		_hp_hit_flash -= delta
 
-	# Update blood drips (gravity)
-	for d in blood_drips:
-		d.vy += 220.0 * delta
-		d.y  += d.vy * delta
-		d.life -= delta
-	# Prune dead drips
-	blood_drips = blood_drips.filter(func(d): return d.life > 0.0 and d.y < 600.0)
-
-	# Spawn new drips from HP bar — чаще при низком HP
-	var hp_frac_p = float(health_current) / max(health_max, 1)
-	_blood_spawn_cd -= delta
-	if _blood_spawn_cd <= 0.0 and not (health_current <= 0):
-		# Чем меньше HP — тем чаще капает (и хотя бы одна капля иногда даже на полном HP)
-		var spawn_rate = 0.15 + (1.0 - hp_frac_p) * 0.3
-		_blood_spawn_cd = randf_range(spawn_rate, spawn_rate * 2.5)
-		# Капля стекает с конца заполненной части HP-бара
-		var bar_w_local = 160.0
-		var fill_w = bar_w_local * hp_frac_p
-		if fill_w > 4.0:
-			var dx = 10.0 + randf() * fill_w
-			blood_drips.append({
-				"x": dx,
-				"y": 20.0,  # снизу HP-бара (y=6+14)
-				"vy": randf_range(10.0, 30.0),
-				"life": randf_range(1.2, 2.5),
-				"max_life": 2.5,
-				"w": randf_range(1.0, 2.0),
-			})
+	# Капли крови на HP-баре — только на ПК (на телефоне это лишняя анимация
+	# + частые перерисовки HUD). На телефоне пропускаем.
+	if not _hud_low_end:
+		for d in blood_drips:
+			d.vy += 220.0 * delta
+			d.y  += d.vy * delta
+			d.life -= delta
+		if blood_drips.size() > 0:
+			blood_drips = blood_drips.filter(func(d): return d.life > 0.0 and d.y < 600.0)
+		var hp_frac_p = float(health_current) / max(health_max, 1)
+		_blood_spawn_cd -= delta
+		if _blood_spawn_cd <= 0.0 and not (health_current <= 0):
+			var spawn_rate = 0.15 + (1.0 - hp_frac_p) * 0.3
+			_blood_spawn_cd = randf_range(spawn_rate, spawn_rate * 2.5)
+			var bar_w_local = 160.0
+			var fill_w = bar_w_local * hp_frac_p
+			if fill_w > 4.0:
+				var dx = 10.0 + randf() * fill_w
+				blood_drips.append({
+					"x": dx, "y": 20.0,
+					"vy": randf_range(10.0, 30.0),
+					"life": randf_range(1.2, 2.5),
+					"max_life": 2.5, "w": randf_range(1.0, 2.0),
+				})
 
 	# Combo + room name timers
 	if combo_display_timer > 0:
 		combo_display_timer -= delta
 	if room_name_timer > 0:
 		room_name_timer -= delta
-	# Throttle: HUD не нужен 180 FPS, рисуем через кадр — экономия CPU
-	if Engine.get_process_frames() % 2 == 0:
+	# Перерисовка HUD: на ПК 30 Гц (каждый 2-й кадр), на телефоне 12 Гц
+	# (каждый 5-й) — отрисовка HUD тяжёлая (~360 элементов), это заметно
+	# снижает нагрузку на слабом CPU.
+	var step := 5 if _hud_low_end else 2
+	if Engine.get_process_frames() % step == 0:
 		draw_node.queue_redraw()
 
 	if message_timer > 0:
@@ -1981,9 +1983,14 @@ func _draw_detailed_minimap(screen_size: Vector2, room):
 	var grid_data = data.grid
 	var explored_data: Array = data.get("explored", [])
 	var has_fog: bool = explored_data.size() > 0
-	# Считаем количество исследованных тайлов как простой хэш
-	var explored_count = 0
-	if has_fog:
+	# Считаем исследованные тайлы НЕ каждый кадр (раньше — перебор всей сетки
+	# ~3300 клеток на КАЖДУЮ отрисовку HUD, дорого на телефоне). Кэшируем и
+	# пересчитываем максимум ~2 раза/сек.
+	_mm_recount_cd -= get_process_delta_time()
+	var explored_count = _mm_explored_count
+	if has_fog and _mm_recount_cd <= 0.0:
+		_mm_recount_cd = 0.5
+		explored_count = 0
 		for r in grows:
 			for c in gcols:
 				if explored_data[r][c]: explored_count += 1
