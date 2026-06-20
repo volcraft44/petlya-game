@@ -1231,12 +1231,18 @@ func _end_insanity_sequence() -> void:
 # ───────────────────────────────────────────────────────────────────────────
 
 func _process(delta):
-	# FPS-счётчик (обновляем 4 раза/сек)
+	# Диагностика производительности (обновляем 4 раза/сек)
 	if _fps_label:
 		_fps_cd -= delta
 		if _fps_cd <= 0.0:
 			_fps_cd = 0.25
-			_fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
+			var draws = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+			var prims = Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
+			var nodes = Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
+			var proc_ms = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+			var phys_ms = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+			_fps_label.text = "FPS:%d  draws:%d prims:%d\nnodes:%d  proc:%.1fms phys:%.1fms" % [
+				Engine.get_frames_per_second(), draws, prims, nodes, proc_ms, phys_ms]
 	_update_camera_shake(delta)
 	_update_camera_lookahead(delta)
 	_update_cs_features(delta)
