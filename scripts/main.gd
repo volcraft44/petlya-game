@@ -133,6 +133,8 @@ var darkness: CanvasModulate
 var _fps_layer: CanvasLayer
 var _fps_label: Label
 var _fps_cd: float = 0.0
+var _main_proc_ms: float = 0.0
+var _music_ms: float = 0.0
 
 # Низкое железо (телефон): на нём выключаем весь динамический свет —
 # главный пожиратель FPS в 2D — и держим сцену яркой через ambient.
@@ -1231,18 +1233,18 @@ func _end_insanity_sequence() -> void:
 # ───────────────────────────────────────────────────────────────────────────
 
 func _process(delta):
+	var _t_main0 := Time.get_ticks_usec()
 	# Диагностика производительности (обновляем 4 раза/сек)
 	if _fps_label:
 		_fps_cd -= delta
 		if _fps_cd <= 0.0:
 			_fps_cd = 0.25
 			var draws = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
-			var prims = Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
 			var nodes = Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
 			var proc_ms = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 			var phys_ms = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
-			_fps_label.text = "FPS:%d  draws:%d prims:%d\nnodes:%d  proc:%.1fms phys:%.1fms" % [
-				Engine.get_frames_per_second(), draws, prims, nodes, proc_ms, phys_ms]
+			_fps_label.text = "FPS:%d draws:%d nodes:%d\nproc:%.1f phys:%.1f | main:%.1f music:%.1f" % [
+				Engine.get_frames_per_second(), draws, nodes, proc_ms, phys_ms, _main_proc_ms, _music_ms]
 	_update_camera_shake(delta)
 	_update_camera_lookahead(delta)
 	_update_cs_features(delta)
@@ -1296,8 +1298,10 @@ func _process(delta):
 			else:
 				death_draw_node.queue_redraw()
 
-	# Background music — keep buffer filled
+	# Background music — keep buffer filled (с замером времени)
+	var _tm0 := Time.get_ticks_usec()
 	_fill_music_buffer()
+	_music_ms = (Time.get_ticks_usec() - _tm0) / 1000.0
 	# Sync progression display each frame (lightweight)
 	if player and is_instance_valid(player):
 		hud.update_progression(player.char_level, player.xp, player.xp_needed)
@@ -1315,6 +1319,8 @@ func _process(delta):
 			else:
 				player.position = Vector2(60, current_room.floor_y - 10)
 			player.velocity = Vector2.ZERO
+
+	_main_proc_ms = (Time.get_ticks_usec() - _t_main0) / 1000.0
 
 func _update_cs_features(delta: float):
 	if not cs_overlay or not player or not is_instance_valid(player):
