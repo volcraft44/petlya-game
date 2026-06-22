@@ -89,6 +89,10 @@ var settings_selection: int = 0
 var settings_master_vol: float = 80.0
 var settings_sfx_vol: float = 60.0
 var settings_shake: bool = true
+# Лимит FPS: варианты (0 = без лимита). Меняется в настройках.
+var settings_fps_options: Array = [30, 60, 90, 120, 144, 0]
+var settings_fps_idx: int = 1   # выставится в _ready по платформе
+const SETTINGS_COUNT := 4   # пунктов в меню настроек (громкость, sfx, тряска, fps)
 var tutorial_requested: bool = false
 
 # Post-boss bonus
@@ -149,7 +153,9 @@ func _ambient(col: Color) -> Color:
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS  # Process even when paused (for ESC menu)
 	# FPS-лимит по платформе: телефон — 60 (экономия батареи/GPU), ПК — 120
-	Engine.max_fps = 60 if OS.has_feature("mobile") else 120
+	# Лимит FPS по умолчанию: телефон 60, ПК 120 (можно сменить в настройках)
+	settings_fps_idx = 1 if OS.has_feature("mobile") else 3
+	Engine.max_fps = settings_fps_options[settings_fps_idx]
 	# На телефоне рендерим в БАЗОВОМ разрешении 1280x768 и растягиваем на экран.
 	# С режимом canvas_items игра рисовалась в родном разрешении телефона
 	# (1080p–1440p) — в 2–6 раз больше пикселей и нагрузки на заполнение.
@@ -1310,6 +1316,44 @@ func _process(delta):
 				player.position = Vector2(60, current_room.floor_y - 10)
 			player.velocity = Vector2.ZERO
 
+func _pause_nav(dir: int):
+	pause_menu_selection = clampi(pause_menu_selection + dir, 0, 3)
+	hud.pause_selection = pause_menu_selection
+	hud.draw_node.queue_redraw()
+
+func _pause_confirm():
+	match pause_menu_selection:
+		0: _unpause()
+		1:
+			settings_open = true
+			hud.show_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake, settings_fps_options[settings_fps_idx])
+		2:
+			_unpause()
+			tutorial_requested = true
+			current_level = 0
+			_load_tutorial_level()
+		3:
+			get_tree().quit()
+
+func _sync_settings_hud():
+	hud.update_settings(settings_selection, settings_master_vol, settings_sfx_vol,
+		settings_shake, settings_fps_options[settings_fps_idx])
+
+func _settings_adjust(dir: int):
+	match settings_selection:
+		0:
+			settings_master_vol = clampf(settings_master_vol + dir * 10.0, 0.0, 100.0)
+			AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(settings_master_vol / 100.0))
+		1:
+			settings_sfx_vol = clampf(settings_sfx_vol + dir * 10.0, 0.0, 100.0)
+		2:
+			settings_shake = not settings_shake
+		3:
+			# Циклически меняем лимит FPS и сразу применяем
+			settings_fps_idx = (settings_fps_idx + dir + settings_fps_options.size()) % settings_fps_options.size()
+			Engine.max_fps = settings_fps_options[settings_fps_idx]
+	_sync_settings_hud()
+
 func _update_cs_features(delta: float):
 	if not cs_overlay or not player or not is_instance_valid(player):
 		return
@@ -1416,36 +1460,30 @@ func _unhandled_input(event):
 
 	# Settings screen intercepts all input
 	if settings_open:
-		if event is InputEventKey and event.pressed:
-			if event.keycode == KEY_ESCAPE:
-				settings_open = false
-				hud.hide_settings()
-			elif event.keycode == KEY_UP or event.keycode == KEY_W:
-				settings_selection = max(0, settings_selection - 1)
-				hud.update_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake)
-			elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-				settings_selection = min(2, settings_selection + 1)
-				hud.update_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake)
-			elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
-				match settings_selection:
-					0:
-						settings_master_vol = max(0.0, settings_master_vol - 10.0)
-						AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(settings_master_vol / 100.0))
-					1:
-						settings_sfx_vol = max(0.0, settings_sfx_vol - 10.0)
-					2:
-						settings_shake = not settings_shake
-				hud.update_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake)
-			elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
-				match settings_selection:
-					0:
-						settings_master_vol = min(100.0, settings_master_vol + 10.0)
-						AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(settings_master_vol / 100.0))
-					1:
-						settings_sfx_vol = min(100.0, settings_sfx_vol + 10.0)
-					2:
-						settings_shake = not settings_shake
-				hud.update_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake)
+		# Навигация и клавишами (ПК), и действиями джойстика (телефон)
+		var k := event.keycode if (event is InputEventKey and event.pressed) else 0
+		var s_back := k == KEY_ESCAPE or k == KEY_ENTER or event.is_action_pressed("jump")
+		var s_up := k == KEY_UP or k == KEY_W or event.is_action_pressed("move_up")
+		var s_down := k == KEY_DOWN or k == KEY_S or event.is_action_pressed("move_down")
+		var s_left := k == KEY_LEFT or k == KEY_A or event.is_action_pressed("move_left")
+		var s_right := k == KEY_RIGHT or k == KEY_D or event.is_action_pressed("move_right")
+		if s_back:
+			settings_open = false
+			hud.hide_settings()
+			get_viewport().set_input_as_handled()
+		elif s_up:
+			settings_selection = max(0, settings_selection - 1)
+			_sync_settings_hud()
+			get_viewport().set_input_as_handled()
+		elif s_down:
+			settings_selection = min(SETTINGS_COUNT - 1, settings_selection + 1)
+			_sync_settings_hud()
+			get_viewport().set_input_as_handled()
+		elif s_left:
+			_settings_adjust(-1)
+			get_viewport().set_input_as_handled()
+		elif s_right:
+			_settings_adjust(1)
 			get_viewport().set_input_as_handled()
 		return
 
@@ -1485,6 +1523,17 @@ func _unhandled_input(event):
 			get_viewport().set_input_as_handled()
 		return
 
+	# === Пауза: навигация джойстиком (телефон) ===
+	if is_paused and event is InputEventAction and event.pressed:
+		if event.is_action("move_up"):
+			_pause_nav(-1)
+		elif event.is_action("move_down"):
+			_pause_nav(1)
+		elif event.is_action("jump"):
+			_pause_confirm()
+		get_viewport().set_input_as_handled()
+		return
+
 	if event is InputEventKey and event.pressed:
 		# === PAUSE MENU ===
 		if event.keycode == KEY_ESCAPE:
@@ -1497,26 +1546,11 @@ func _unhandled_input(event):
 
 		if is_paused:
 			if event.keycode == KEY_UP or event.keycode == KEY_W:
-				pause_menu_selection = max(0, pause_menu_selection - 1)
-				hud.pause_selection = pause_menu_selection
-				hud.draw_node.queue_redraw()
+				_pause_nav(-1)
 			elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-				pause_menu_selection = min(3, pause_menu_selection + 1)
-				hud.pause_selection = pause_menu_selection
-				hud.draw_node.queue_redraw()
+				_pause_nav(1)
 			elif event.keycode == KEY_ENTER or event.keycode == KEY_SPACE:
-				match pause_menu_selection:
-					0: _unpause()  # Resume
-					1:  # Settings
-						settings_open = true
-						hud.show_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake)
-					2:  # Tutorial
-						_unpause()
-						tutorial_requested = true
-						current_level = 0
-						_load_tutorial_level()
-					3:  # Quit
-						get_tree().quit()
+				_pause_confirm()
 			get_viewport().set_input_as_handled()
 			return
 

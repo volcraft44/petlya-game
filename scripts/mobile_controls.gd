@@ -111,6 +111,9 @@ func _create_buttons() -> void:
 	_add(Rect2(e_x, e_y, ssb, ssb), "E", "", "e_key")
 	_add(Rect2(e_x - gap - ssb, e_y, ssb, ssb), "ЛЕЧ", "", "h_key")
 
+	# ── Верх-лево: пауза/настройки (по центру сверху, маленькая) ──
+	_add(Rect2(W * 0.5 - 32, pad, 64, 64), "II", "", "esc_key")
+
 	if draw_node:
 		draw_node.queue_redraw()
 
@@ -258,6 +261,11 @@ func _send_special(sp: String, pressed: bool) -> void:
 			# Двери/предметы ловят именно клавишу E (а не action), плюс
 			# "interact" в input map тоже привязан к E — так работает всё.
 			_send_key(KEY_E, pressed)
+		"esc_key":
+			# Пауза/настройки — шлём Escape (только на нажатие, не на отпускание)
+			if pressed:
+				_send_key(KEY_ESCAPE, true)
+				_send_key(KEY_ESCAPE, false)
 
 func _send_mouse(btn: int, pressed: bool) -> void:
 	var ev := InputEventMouseButton.new()
