@@ -1461,12 +1461,12 @@ func _unhandled_input(event):
 	# Settings screen intercepts all input
 	if settings_open:
 		# Навигация и клавишами (ПК), и действиями джойстика (телефон)
-		var k := event.keycode if (event is InputEventKey and event.pressed) else 0
-		var s_back := k == KEY_ESCAPE or k == KEY_ENTER or event.is_action_pressed("jump")
-		var s_up := k == KEY_UP or k == KEY_W or event.is_action_pressed("move_up")
-		var s_down := k == KEY_DOWN or k == KEY_S or event.is_action_pressed("move_down")
-		var s_left := k == KEY_LEFT or k == KEY_A or event.is_action_pressed("move_left")
-		var s_right := k == KEY_RIGHT or k == KEY_D or event.is_action_pressed("move_right")
+		var k: int = event.keycode if (event is InputEventKey and event.pressed) else 0
+		var s_back: bool = k == KEY_ESCAPE or k == KEY_ENTER or event.is_action_pressed("jump")
+		var s_up: bool = k == KEY_UP or k == KEY_W or event.is_action_pressed("move_up")
+		var s_down: bool = k == KEY_DOWN or k == KEY_S or event.is_action_pressed("move_down")
+		var s_left: bool = k == KEY_LEFT or k == KEY_A or event.is_action_pressed("move_left")
+		var s_right: bool = k == KEY_RIGHT or k == KEY_D or event.is_action_pressed("move_right")
 		if s_back:
 			settings_open = false
 			hud.hide_settings()
