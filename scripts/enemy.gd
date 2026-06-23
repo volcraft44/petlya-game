@@ -1711,8 +1711,41 @@ func _mage_shoot(dir: Vector2):
 		var spread = (i - 1) * 0.25
 		_spawn_projectile(0, dir.normalized().rotated(spread))
 
+var _low_end_draw: bool = (OS.get_name() == "Android" or OS.get_name() == "iOS")
+
+# Упрощённый враг для телефона: ~8 отрисовок вместо ~100. Боссы/минибоссы
+# рисуются детально (их мало, они важны визуально).
+func _draw_simple(s: int) -> void:
+	# Тень
+	draw_rect(Rect2(-7, 1, 14, 3), Color(0, 0, 0, 0.35))
+	var col := Color(0.64, 0.60, 0.52)   # костяной по умолчанию
+	if is_hit or white_flash_timer > 0:
+		col = Color(1, 1, 1)
+	elif frozen_timer > 0:
+		col = Color(0.6, 0.85, 1.0)
+	elif is_on_fire:
+		col = Color(1.0, 0.5, 0.2)
+	elif is_poisoned:
+		col = Color(0.5, 0.9, 0.3)
+	# Тело + голова
+	draw_rect(Rect2(-6, -20, 12, 20), col)
+	draw_rect(Rect2(-5, -29, 10, 9), col.lightened(0.08))
+	# Глаза по направлению
+	draw_rect(Rect2(s * 2 - 1, -26, 2, 2), Color(0.1, 0.0, 0.0))
+	# Подсказка атаки
+	if is_attacking_melee:
+		draw_rect(Rect2(s * 6, -16, s * 9, 3), Color(0.85, 0.85, 0.9))
+	# HP-полоска при ранении
+	if health < max_health and max_health > 0:
+		var f = clampf(float(health) / float(max_health), 0.0, 1.0)
+		draw_rect(Rect2(-9, -35, 18, 2), Color(0.2, 0, 0, 0.7))
+		draw_rect(Rect2(-9, -35, 18.0 * f, 2), Color(0.95, 0.2, 0.2))
+
 func _draw():
 	var s = 1 if facing_right else -1
+	if _low_end_draw and not is_miniboss:
+		_draw_simple(s)
+		return
 	var _was_shaking = hit_shake_timer > 0
 
 	# === Soft shadow под ногами (привязывает к полу) ===
