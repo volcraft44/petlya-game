@@ -141,7 +141,7 @@ var _fps_cd: float = 0.0
 
 # Низкое железо (телефон): на нём выключаем весь динамический свет —
 # главный пожиратель FPS в 2D — и держим сцену яркой через ambient.
-var _low_end: bool = OS.has_feature("mobile")
+var _low_end: bool = (OS.get_name() == "Android" or OS.get_name() == "iOS")
 
 # Ставит цвет CanvasModulate. На телефоне свет выключен, поэтому держим
 # сцену достаточно светлой (иначе без источников света было бы черно).
@@ -154,7 +154,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 
 func _load_settings():
 	# По умолчанию: лимит FPS телефон 60 / ПК 120
-	settings_fps_idx = 1 if OS.has_feature("mobile") else 3
+	settings_fps_idx = 1 if (OS.get_name() == "Android" or OS.get_name() == "iOS") else 3
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK:
 		settings_master_vol = cfg.get_value("audio", "master", settings_master_vol)
@@ -180,7 +180,7 @@ func _ready():
 	# С режимом canvas_items игра рисовалась в родном разрешении телефона
 	# (1080p–1440p) — в 2–6 раз больше пикселей и нагрузки на заполнение.
 	# Режим viewport убирает это — главный выигрыш FPS на телефоне.
-	if OS.has_feature("mobile"):
+	if (OS.get_name() == "Android" or OS.get_name() == "iOS"):
 		var win := get_window()
 		win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND

@@ -96,7 +96,7 @@ func set_camera(cam: Camera2D) -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	# Throttle: ПК ~20 Гц, телефон ~10 Гц — параллакс медленный, разницы нет
-	var _step := 6 if OS.has_feature("mobile") else 3
+	var _step := 6 if (OS.get_name() == "Android" or OS.get_name() == "iOS") else 3
 	if Engine.get_process_frames() % _step == 0:
 		_draw_node.queue_redraw()
 

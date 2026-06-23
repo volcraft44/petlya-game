@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-var _hud_low_end: bool = OS.has_feature("mobile")
+var _hud_low_end: bool = (OS.get_name() == "Android" or OS.get_name() == "iOS")
 
 var health_max: int = 100
 var health_current: int = 100
@@ -1383,7 +1383,7 @@ func _draw_controls(screen_size: Vector2):
 
 	y += 6
 	var pulse = sin(Time.get_ticks_msec() * 0.004) * 0.3 + 0.7
-	var cont_txt = "Нажми на экран — продолжить" if OS.has_feature("mobile") else "[Enter] Continue"
+	var cont_txt = "Нажми на экран — продолжить" if (OS.get_name() == "Android" or OS.get_name() == "iOS") else "[Enter] Continue"
 	draw_node.draw_string(font, Vector2(cx - 90, y), cont_txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 12, Color(1, 1, 0.6, pulse))
 
 func _shop_navigate(dir: int):

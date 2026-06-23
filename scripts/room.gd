@@ -4021,7 +4021,7 @@ func _get_visible_tile_range() -> Array:
 
 const RECULL_DIST := 110.0
 var _last_cull_pos: Vector2 = Vector2(-99999, -99999)
-var _room_low_end: bool = OS.has_feature("mobile")
+var _room_low_end: bool = (OS.get_name() == "Android" or OS.get_name() == "iOS")
 
 func _check_draw_cull() -> void:
 	# Перерисовываем комнату только когда игрок ушёл дальше порога — а не

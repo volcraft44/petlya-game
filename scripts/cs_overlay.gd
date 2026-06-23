@@ -181,7 +181,7 @@ func _process(delta: float) -> void:
 		_update_case(delta)
 
 	# Throttle: ПК 30 Гц, телефон 15 Гц — экономия CPU на слабом железе
-	var _step := 4 if OS.has_feature("mobile") else 2
+	var _step := 4 if (OS.get_name() == "Android" or OS.get_name() == "iOS") else 2
 	if Engine.get_process_frames() % _step == 0:
 		_draw_node.queue_redraw()
 

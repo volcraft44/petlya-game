@@ -10,7 +10,7 @@ var color: Color = Color(0.95, 0.75, 0.85)  # пастельный pinker — dr
 var _low_end: bool = false
 
 func _ready():
-	_low_end = OS.has_feature("mobile")
+	_low_end = (OS.get_name() == "Android" or OS.get_name() == "iOS")
 
 	# На телефоне свет факела ВЫКЛЮЧЕН полностью — при 6–10 факелах это были
 	# десятки перекрывающихся источников. Остаётся только рисованное пламя
