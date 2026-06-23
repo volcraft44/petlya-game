@@ -150,12 +150,32 @@ func _ambient(col: Color) -> Color:
 		return Color(0.62, 0.56, 0.66)
 	return col
 
+const SETTINGS_PATH := "user://settings.cfg"
+
+func _load_settings():
+	# По умолчанию: лимит FPS телефон 60 / ПК 120
+	settings_fps_idx = 1 if OS.has_feature("mobile") else 3
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		settings_master_vol = cfg.get_value("audio", "master", settings_master_vol)
+		settings_sfx_vol = cfg.get_value("audio", "sfx", settings_sfx_vol)
+		settings_shake = cfg.get_value("game", "shake", settings_shake)
+		settings_fps_idx = clampi(cfg.get_value("game", "fps_idx", settings_fps_idx), 0, settings_fps_options.size() - 1)
+
+func _save_settings():
+	var cfg := ConfigFile.new()
+	cfg.set_value("audio", "master", settings_master_vol)
+	cfg.set_value("audio", "sfx", settings_sfx_vol)
+	cfg.set_value("game", "shake", settings_shake)
+	cfg.set_value("game", "fps_idx", settings_fps_idx)
+	cfg.save(SETTINGS_PATH)
+
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS  # Process even when paused (for ESC menu)
-	# FPS-лимит по платформе: телефон — 60 (экономия батареи/GPU), ПК — 120
-	# Лимит FPS по умолчанию: телефон 60, ПК 120 (можно сменить в настройках)
-	settings_fps_idx = 1 if OS.has_feature("mobile") else 3
+	# Загружаем сохранённые настройки (громкость, sfx, тряска, лимит FPS)
+	_load_settings()
 	Engine.max_fps = settings_fps_options[settings_fps_idx]
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(settings_master_vol / 100.0))
 	# На телефоне рендерим в БАЗОВОМ разрешении 1280x768 и растягиваем на экран.
 	# С режимом canvas_items игра рисовалась в родном разрешении телефона
 	# (1080p–1440p) — в 2–6 раз больше пикселей и нагрузки на заполнение.
@@ -1242,7 +1262,9 @@ func _process(delta):
 		_fps_cd -= delta
 		if _fps_cd <= 0.0:
 			_fps_cd = 0.25
-			_fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
+			var d = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+			var pr = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+			_fps_label.text = "FPS:%d D:%d P:%.0fms" % [Engine.get_frames_per_second(), d, pr]
 	_update_camera_shake(delta)
 	_update_camera_lookahead(delta)
 	_update_cs_features(delta)
@@ -1352,6 +1374,7 @@ func _settings_adjust(dir: int):
 			# Циклически меняем лимит FPS и сразу применяем
 			settings_fps_idx = (settings_fps_idx + dir + settings_fps_options.size()) % settings_fps_options.size()
 			Engine.max_fps = settings_fps_options[settings_fps_idx]
+	_save_settings()
 	_sync_settings_hud()
 
 func _update_cs_features(delta: float):
