@@ -1270,8 +1270,8 @@ func _process(delta):
 				room_ms = current_room.dbg_draw_ms
 				if current_room.tile_layer and is_instance_valid(current_room.tile_layer):
 					tile_ms = current_room.tile_layer.dbg_draw_ms
-			_fps_label.text = "FPS:%d D:%d P:%.0fms\ntile:%.1f room:%.1f" % [
-				Engine.get_frames_per_second(), d, pr, tile_ms, room_ms]
+			_fps_label.text = "FPS:%d D:%d P:%.0fms\ntile:%.1f room:%.1f os:%s low:%s" % [
+				Engine.get_frames_per_second(), d, pr, tile_ms, room_ms, OS.get_name(), str(_low_end)]
 	_update_camera_shake(delta)
 	_update_camera_lookahead(delta)
 	_update_cs_features(delta)
