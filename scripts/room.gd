@@ -4019,7 +4019,7 @@ func _get_visible_tile_range() -> Array:
 	var r1 := clampi(int((center.y + halfy) / tile_size) + 1, 0, grid_rows)
 	return [c0, c1, r0, r1]
 
-const RECULL_DIST := 110.0
+const RECULL_DIST := 64.0
 var _last_cull_pos: Vector2 = Vector2(-99999, -99999)
 var _room_low_end: bool = (OS.get_name() == "Android" or OS.get_name() == "iOS")
 
@@ -4210,18 +4210,21 @@ func _draw_body():
 	# Здесь — только динамика (кровь, декор, сундуки, бочки и т.п.).
 
 	# === BLOOD POOLS (после тайлов, с анимированными бликами) ===
+	# На телефоне косметику (кровь/лужи/блики) пропускаем — дорого, а
+	# room._draw перестраивается при ходьбе.
 	var blood_t = Time.get_ticks_msec() * 0.001
-	for pool in blood_pools:
-		draw_circle(Vector2(pool.x, pool.y), pool.r, Color(0.45, 0.02, 0.02, pool.alpha))
-		draw_circle(Vector2(pool.x - pool.r * 0.3, pool.y - 1), pool.r * 0.5,
-			Color(0.30, 0.01, 0.01, pool.alpha * 0.75))
-		# Ripple — мерцающий блик на поверхности
-		var ripple_t = sin(blood_t * 2.0 + pool.x * 0.05)
-		var ripple_a = (0.5 + 0.5 * ripple_t) * pool.alpha * 0.6
-		var rip_offset = Vector2(pool.r * 0.25 * sin(blood_t + pool.x * 0.03),
-			pool.r * 0.1 * cos(blood_t * 0.7 + pool.y * 0.05))
-		draw_circle(Vector2(pool.x, pool.y - pool.r * 0.4) + rip_offset,
-			pool.r * 0.20, Color(0.85, 0.35, 0.30, ripple_a))
+	if not _room_low_end:
+		for pool in blood_pools:
+			draw_circle(Vector2(pool.x, pool.y), pool.r, Color(0.45, 0.02, 0.02, pool.alpha))
+			draw_circle(Vector2(pool.x - pool.r * 0.3, pool.y - 1), pool.r * 0.5,
+				Color(0.30, 0.01, 0.01, pool.alpha * 0.75))
+			# Ripple — мерцающий блик на поверхности
+			var ripple_t = sin(blood_t * 2.0 + pool.x * 0.05)
+			var ripple_a = (0.5 + 0.5 * ripple_t) * pool.alpha * 0.6
+			var rip_offset = Vector2(pool.r * 0.25 * sin(blood_t + pool.x * 0.03),
+				pool.r * 0.1 * cos(blood_t * 0.7 + pool.y * 0.05))
+			draw_circle(Vector2(pool.x, pool.y - pool.r * 0.4) + rip_offset,
+				pool.r * 0.20, Color(0.85, 0.35, 0.30, ripple_a))
 
 	# === RUSH B graffiti (CS пасхалка) ===
 	if is_rush_b:
@@ -4518,8 +4521,9 @@ func _draw_body():
 		draw_string(ThemeDB.fallback_font, Vector2(room_width * 0.5, 35),
 			"☠ ПРОКЛЯТАЯ КОМНАТА ☠", HORIZONTAL_ALIGNMENT_CENTER, -1, 10, Color(0.65, 0.1, 0.85, blink2))
 
-	# World-space horror effects
-	_draw_horror_effects()
+	# World-space horror effects — косметика, пропускаем на телефоне
+	if not _room_low_end:
+		_draw_horror_effects()
 
 func _draw_traps():
 	# Spikes — sharp metal spikes on floor
