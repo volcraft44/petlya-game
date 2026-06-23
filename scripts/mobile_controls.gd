@@ -59,17 +59,32 @@ func _ready() -> void:
 	layer = 50
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
-	vw = float(ProjectSettings.get_setting("display/window/size/viewport_width", 1280))
-	vh = float(ProjectSettings.get_setting("display/window/size/viewport_height", 768))
-
 	draw_node = Control.new()
 	draw_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	draw_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	draw_node.draw.connect(_on_draw)
 	add_child(draw_node)
 
+	_refresh_size()
 	_create_buttons()
 	draw_node.visible = active
+	# Пересоздаём кнопки при изменении размера экрана (поворот/разные телефоны)
+	get_viewport().size_changed.connect(_on_viewport_resized)
+
+func _refresh_size() -> void:
+	# РЕАЛЬНЫЙ размер вьюпорта (при aspect=expand он шире базовых 1280 на
+	# широких экранах). Раньше брали базовый 1280 → кнопки уезжали в центр.
+	var vs := get_viewport().get_visible_rect().size
+	vw = vs.x
+	vh = vs.y
+	if vw < 100.0:
+		vw = float(ProjectSettings.get_setting("display/window/size/viewport_width", 1280))
+	if vh < 100.0:
+		vh = float(ProjectSettings.get_setting("display/window/size/viewport_height", 768))
+
+func _on_viewport_resized() -> void:
+	_refresh_size()
+	_create_buttons()
 
 func _create_buttons() -> void:
 	# Движение — джойстик слева. Кнопки распределены по краям:
