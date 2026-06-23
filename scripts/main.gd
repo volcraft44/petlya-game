@@ -1264,7 +1264,14 @@ func _process(delta):
 			_fps_cd = 0.25
 			var d = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
 			var pr = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
-			_fps_label.text = "FPS:%d D:%d P:%.0fms" % [Engine.get_frames_per_second(), d, pr]
+			var tile_ms := 0.0
+			var room_ms := 0.0
+			if current_room and is_instance_valid(current_room):
+				room_ms = current_room.dbg_draw_ms
+				if current_room.tile_layer and is_instance_valid(current_room.tile_layer):
+					tile_ms = current_room.tile_layer.dbg_draw_ms
+			_fps_label.text = "FPS:%d D:%d P:%.0fms\ntile:%.1f room:%.1f" % [
+				Engine.get_frames_per_second(), d, pr, tile_ms, room_ms]
 	_update_camera_shake(delta)
 	_update_camera_lookahead(delta)
 	_update_cs_features(delta)

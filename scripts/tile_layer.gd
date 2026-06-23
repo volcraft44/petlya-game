@@ -52,12 +52,16 @@ func _compute_visible_range() -> Rect2i:
 	var y1 := clampi(int((center.y + halfy) / ts) + 1, 0, room.grid_rows)
 	return Rect2i(x0, y0, x1 - x0, y1 - y0)
 
+var dbg_draw_ms: float = 0.0
+
 func _draw() -> void:
 	if room == null:
 		return
+	var _t0 := Time.get_ticks_usec()
 	_draw_wall_background()
 	_draw_solid_tiles()
 	_draw_surface_edges()
+	dbg_draw_ms = (Time.get_ticks_usec() - _t0) / 1000.0
 
 func _draw_wall_background() -> void:
 	var rw = room.room_width

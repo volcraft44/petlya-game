@@ -4193,7 +4193,14 @@ func _draw_corpse(cp: Dictionary):
 			draw_rect(Rect2(px - 1, py - 4, 1.5, 4), bone)
 			draw_circle(Vector2(px + 5, py + 2), 1.0, bone_dark)
 
+var dbg_draw_ms: float = 0.0
+
 func _draw():
+	var _ddt0 := Time.get_ticks_usec()
+	_draw_body()
+	dbg_draw_ms = (Time.get_ticks_usec() - _ddt0) / 1000.0
+
+func _draw_body():
 	# Статичные тайлы/фон/кромки рисует tile_layer (отдельный кэш-слой).
 	# Здесь — только динамика (кровь, декор, сундуки, бочки и т.п.).
 
