@@ -2646,7 +2646,14 @@ func add_relic(rid: String):
 			smoke_grenades += 1
 			flash_grenades += 1
 
+var dbg_draw_ms: float = 0.0
+
 func _draw():
+	var _pdt0 := Time.get_ticks_usec()
+	_draw_body2()
+	dbg_draw_ms = (Time.get_ticks_usec() - _pdt0) / 1000.0
+
+func _draw_body2():
 	# ── Acid trail: 3 RGB-ghost копии следа за движением ──
 	for tr in _acid_trail:
 		var life_frac = tr.life / tr.max_life
