@@ -4526,13 +4526,24 @@ func _draw_body():
 		_draw_horror_effects()
 
 func _draw_traps():
+	var vr = _get_visible_tile_range()
+	var vx0 = vr[0] * tile_size - 32
+	var vx1 = vr[1] * tile_size + 32
 	# Spikes — sharp metal spikes on floor
 	for sp in spikes:
 		var x = sp.x
 		var y = sp.y
 		var w = sp.w
+		if x + w < vx0 or x > vx1:   # отсечение по экрану
+			continue
 		# Base plate
 		draw_rect(Rect2(x - 1, y - 2, w + 2, 3), Color(0.3, 0.3, 0.33))
+		# На телефоне — простая полоса шипов (2 прямоугольника на всю полосу)
+		# вместо полигона+линии+пятна на КАЖДЫЙ зуб (это были сотни отрисовок).
+		if _room_low_end:
+			draw_rect(Rect2(x, y - 8, w, 7), Color(0.48, 0.48, 0.54, 0.92))
+			draw_rect(Rect2(x, y - 8, w, 2), Color(0.7, 0.7, 0.75, 0.6))
+			continue
 		var num_sp = int(w / 5)
 		for i in num_sp:
 			var sx = x + i * 5 + 2.5
