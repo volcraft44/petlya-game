@@ -230,7 +230,69 @@ var chain_timer: float = 0.0
 var spin_active: bool = false  # Morningstar spin
 var spin_timer: float = 0.0
 var constrict_targets: Array = []  # Snake hand targets
-var death_note_targets: Array = []  # {enemy, timer}
+var death_note_targets: Array = []  # {enemy, timer, name}
+# --- Запись имён Тетрадью Смерти ---
+var dn_writing: bool = false
+var dn_queue: Array = []            # враги в очереди на запись
+var dn_write_cd: float = 0.0
+const DN_WRITE_INTERVAL := 0.18     # секунд на одно имя (не долго)
+const DN_RADIUS := 160.0            # ~10 блоков (tile 16)
+const DN_DEATH_TIME := 6.0          # через сколько умирает записанный
+const DN_NAMES := ["Райто", "Эл", "Миса", "Кира", "Рюк", "Рем", "Соитиро",
+	"Найт", "Мелло", "Матт", "Ниа", "Така", "Сайу", "Аидзава", "Моги",
+	"Укита", "Мацуда", "Идэ", "Ватари", "Хигучи"]
+
+func _start_death_note_writing():
+	if dn_writing:
+		return
+	var room = _find_room()
+	if room == null:
+		return
+	dn_queue.clear()
+	for e in room.enemies:
+		if is_instance_valid(e) and global_position.distance_to(e.global_position) <= DN_RADIUS:
+			# уже записанных не добавляем повторно
+			var marked := false
+			for dt in death_note_targets:
+				if dt.enemy == e:
+					marked = true
+					break
+			if not marked:
+				dn_queue.append(e)
+	if dn_queue.is_empty():
+		weapon_pickup_msg = "Нет целей рядом"
+		weapon_msg_timer = 0.6
+		return
+	dn_writing = true
+	dn_write_cd = DN_WRITE_INTERVAL
+	can_attack = false
+	attack_timer = 2.0   # кулдаун, чтобы не спамить
+	weapon_pickup_msg = "ЗАПИСЬ..."
+	weapon_msg_timer = 0.8
+
+func _update_death_note_writing(delta: float):
+	if not dn_writing:
+		return
+	velocity.x = 0.0   # игрок не двигается во время записи
+	dn_write_cd -= delta
+	if dn_write_cd > 0.0:
+		return
+	dn_write_cd = DN_WRITE_INTERVAL
+	# Записываем следующего живого врага из очереди
+	while not dn_queue.is_empty():
+		var e = dn_queue.pop_front()
+		if is_instance_valid(e):
+			var nm: String = DN_NAMES[randi() % DN_NAMES.size()]
+			death_note_targets.append({"enemy": e, "timer": DN_DEATH_TIME, "name": nm})
+			if "death_note_timer_display" in e:
+				e.death_note_timer_display = DN_DEATH_TIME
+			if "death_note_name" in e:
+				e.death_note_name = nm
+			weapon_pickup_msg = "delete: " + nm
+			weapon_msg_timer = 0.7
+			break
+	if dn_queue.is_empty():
+		dn_writing = false
 var spear_lunge: bool = false
 var spear_lunge_timer: float = 0.0
 var staff_spin_timer: float = 0.0  # Golden staff 4s spin reflect
@@ -750,6 +812,14 @@ func stun(duration: float):
 	velocity = Vector2.ZERO
 
 func _physics_process(delta):
+	# Тетрадь Смерти: во время записи имён игрок стоит на месте.
+	if dn_writing:
+		_update_death_note_writing(delta)
+		velocity.x = 0.0
+		velocity.y += gravity * delta   # гравитация работает (не зависает в воздухе)
+		move_and_slide()
+		return
+
 	# === CS-trackers ===
 	# Idle-таймер для инспекта: растёт когда стоим и ничего не нажимаем
 	var any_movement_input = Input.is_action_pressed("move_left") or Input.is_action_pressed("move_right") \
@@ -1185,7 +1255,8 @@ func _physics_process(delta):
 			facing_right = true
 
 	var wd_move = weapon_data.get(current_weapon, weapon_data[1])
-	var current_speed = speed * wd_move.speed_mult
+	# Замедление от тяжёлого оружия убрано — ходим с полной скоростью всегда.
+	var current_speed = speed
 	if active_card == "speed_boots":
 		current_speed *= 1.5
 	if scroll_speed_active:
@@ -1541,6 +1612,11 @@ func _do_attack():
 		_do_ranged_attack(special)
 		return
 
+	# Тетрадь Смерти — запускаем запись имён (а не обычная атака)
+	if special == "death_note":
+		_start_death_note_writing()
+		return
+
 	is_attacking = true
 	can_attack = false
 	attack_timer = wd.cooldown
@@ -1749,17 +1825,8 @@ func _on_attack_hit(body) -> bool:
 			if not already:
 				constrict_targets.append({"enemy": body, "timer": 5.0, "tick": 1.0, "stacks": 1})
 
-		# Death note — mark for death in 40s
-		if special == "death_note":
-			var already_marked = false
-			for dnt in death_note_targets:
-				if dnt.enemy == body:
-					already_marked = true
-					break
-			if not already_marked:
-				death_note_targets.append({"enemy": body, "timer": 40.0})
-				weapon_pickup_msg = "ЗАПИСАНО: 40с"
-				weapon_msg_timer = 1.5
+		# Death note — пометка по удару убрана: теперь запись имён по области
+		# (см. _start_death_note_writing). Здесь ничего не делаем.
 
 		# Sword & Shield combo — 3rd swing = shield bash (blocks + extra dmg)
 		if special == "sword_shield_combo" and swing_index == 2:

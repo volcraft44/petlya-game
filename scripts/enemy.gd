@@ -91,6 +91,7 @@ var death_particles: Array = []  # [{pos, vel, life, color}]
 var is_on_fire: bool = false
 var fire_timer_display: float = 0.0
 var death_note_timer_display: float = -1.0  # -1 = not marked
+var death_note_name: String = ""             # записанное имя (Тетрадь Смерти)
 var is_poisoned: bool = false
 
 # FLY enemy
@@ -1740,6 +1741,13 @@ func _draw_simple(s: int) -> void:
 		var f = clampf(float(health) / float(max_health), 0.0, 1.0)
 		draw_rect(Rect2(-9, -35, 18, 2), Color(0.2, 0, 0, 0.7))
 		draw_rect(Rect2(-9, -35, 18.0 * f, 2), Color(0.95, 0.2, 0.2))
+	# Тетрадь Смерти: имя + таймер
+	if death_note_timer_display >= 0:
+		if death_note_name != "":
+			draw_string(ThemeDB.fallback_font, Vector2(-24, -44),
+				death_note_name, HORIZONTAL_ALIGNMENT_CENTER, 48, 7, Color(0.95, 0.85, 0.85, 0.9))
+		draw_string(ThemeDB.fallback_font, Vector2(-8, -28),
+			"%.0fс" % death_note_timer_display, HORIZONTAL_ALIGNMENT_CENTER, -1, 8, Color(0.85, 0.1, 0.1))
 
 func _draw():
 	var s = 1 if facing_right else -1
@@ -1906,8 +1914,11 @@ func _draw():
 			var by = -4 - pi * 5 - fmod(t + pi, 1.0) * 3
 			draw_circle(Vector2(bx, by), 2, Color(0.2, 0.9, 0.1, 0.5))
 
-	# Death Note timer
+	# Death Note timer + имя
 	if death_note_timer_display >= 0:
+		if death_note_name != "":
+			draw_string(ThemeDB.fallback_font, Vector2(-24, -44),
+				death_note_name, HORIZONTAL_ALIGNMENT_CENTER, 48, 7, Color(0.95, 0.85, 0.85, 0.9))
 		var timer_text = "%.0f" % death_note_timer_display
 		draw_string(ThemeDB.fallback_font, Vector2(-8, -28),
 			timer_text + "с", HORIZONTAL_ALIGNMENT_CENTER, -1, 8, Color(0.8, 0.1, 0.1, 0.9))
