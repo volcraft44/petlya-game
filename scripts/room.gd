@@ -4880,11 +4880,27 @@ func _draw_decorations():
 
 func _draw_ore_blocks():
 	var t = Time.get_ticks_msec() * 0.002
+	# Отсечение по видимой области (раньше рисовалась ВСЯ руда комнаты)
+	var vr = _get_visible_tile_range()
+	var vx0 = vr[0] * tile_size - 24
+	var vx1 = vr[1] * tile_size + 24
+	var vy0 = vr[2] * tile_size - 24
+	var vy1 = vr[3] * tile_size + 24
 	for ore in ore_blocks:
 		if ore.mined:
 			continue
+		if ore.x < vx0 or ore.x > vx1 or ore.y < vy0 or ore.y > vy1:
+			continue
 		var ox = ore.x - 8
 		var oy = ore.y - 8
+		# На телефоне — упрощённая руда (блок + 1 glow), без тени-полигона,
+		# мерцающих жил и искр (это ~13 отрисовок на каждую руду).
+		if _room_low_end:
+			draw_circle(Vector2(ore.x, ore.y), 13, Color(1.00, 0.70, 0.30, 0.16))
+			draw_rect(Rect2(ox, oy, 16, 16), Color(0.42, 0.40, 0.36))
+			draw_rect(Rect2(ox + 3, oy + 3, 3, 2), Color(0.85, 0.65, 0.40))
+			draw_rect(Rect2(ox, oy, 16, 1), Color(0.55, 0.52, 0.46))
+			continue
 		# Soft shadow под рудой
 		var sh_pts = PackedVector2Array()
 		for s in 14:
@@ -5131,8 +5147,8 @@ func _draw_ladders():
 		draw_line(Vector2(lx - 4, ly_top), Vector2(lx - 4, ly_bot), rail_col, 1.5)
 		draw_line(Vector2(lx + 4, ly_top), Vector2(lx + 4, ly_bot), rail_col, 1.5)
 
-		# Horizontal rungs every 10px
-		var rung_step = 10
+		# Horizontal rungs (на телефоне реже — вдвое меньше отрисовок)
+		var rung_step = 20 if _room_low_end else 10
 		for i in range(0, int(lad_len), rung_step):
 			var ry = ly_top + i + 4
 			if ry < ly_bot:
@@ -5152,10 +5168,15 @@ func _draw_oneway_platforms():
 		# Thin platform line (can jump through from below)
 		draw_rect(Rect2(plat.x, plat.y, plat.w, 3), surface_color)
 		draw_rect(Rect2(plat.x, plat.y + 3, plat.w, 1), rock_dark)
-		# Dotted underside (visual cue: one-way)
-		for dx in range(0, int(plat.w), 8):
-			draw_rect(Rect2(plat.x + dx + 1, plat.y + 4, 3, 1),
+		# Dotted underside (visual cue) — пунктир циклом дорогой, на телефоне
+		# заменяем одной полупрозрачной полосой.
+		if _room_low_end:
+			draw_rect(Rect2(plat.x + 1, plat.y + 4, plat.w - 2, 1),
 				Color(rock_dark.r, rock_dark.g, rock_dark.b, 0.3))
+		else:
+			for dx in range(0, int(plat.w), 8):
+				draw_rect(Rect2(plat.x + dx + 1, plat.y + 4, 3, 1),
+					Color(rock_dark.r, rock_dark.g, rock_dark.b, 0.3))
 
 func _draw_chests():
 	var t_chest = Time.get_ticks_msec() * 0.002
