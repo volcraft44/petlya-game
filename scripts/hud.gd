@@ -570,6 +570,42 @@ func _on_draw():
 	var bar_h = 14.0
 	var hp_frac = float(health_current) / max(health_max, 1)
 
+	# ── Простой HP-бар на телефоне (3 прямоугольника вместо ~50 «мяса/вен») ──
+	# Детальный «кровавый» бар очень дорог по draw-вызовам — на телефоне даём
+	# плоский вариант ради FPS.
+	if _hud_low_end:
+		# Минимальный HUD на телефоне: плоский HP + монеты/опыт + миникарта.
+		# Декоративные элементы пропущены ради резкого снижения draw-вызовов.
+		draw_node.draw_rect(Rect2(hp_x, hp_y, bar_w, bar_h), Color(0.10, 0.03, 0.03, 0.95))
+		if hp_frac > 0.0:
+			var hcol := Color(0.75, 0.12, 0.12) if hp_frac > 0.3 else Color(1.0, 0.15, 0.10)
+			draw_node.draw_rect(Rect2(hp_x, hp_y, bar_w * hp_frac, bar_h), hcol)
+		draw_node.draw_string(ThemeDB.fallback_font, Vector2(hp_x + bar_w + 6, hp_y + 12),
+			"%d/%d" % [health_current, health_max], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.8, 0.8))
+		_draw_coins_xp(screen_size)
+		_draw_minimap(screen_size)
+		# Сообщения и важные экраны меню всё равно показываем
+		if message_timer > 0 and message_text != "":
+			draw_node.draw_string(ThemeDB.fallback_font, Vector2(screen_size.x * 0.5 - 100, 60),
+				message_text, HORIZONTAL_ALIGNMENT_CENTER, 200, 14, Color(1, 1, 0.8))
+		if card_selection_visible:
+			_draw_card_selection(screen_size)
+		if weapon_menu_visible:
+			_draw_weapon_menu(screen_size)
+		if level_up_visible and level_up_choices.size() > 0:
+			_draw_level_up(screen_size)
+		if boss_bonus_visible and boss_bonus_options.size() > 0:
+			_draw_boss_bonus(screen_size)
+		if relic_menu_open:
+			_draw_relic_choice(screen_size)
+		if show_controls:
+			_draw_controls(screen_size)
+		if pause_visible:
+			_draw_pause_menu(screen_size)
+		if settings_visible:
+			_draw_settings_screen(screen_size)
+		return
+
 	# Тёмная "панель"-фон (грязно-кровавая)
 	draw_node.draw_rect(Rect2(5, 3, bar_w + 80, 22), Color(0.06, 0.02, 0.02, 0.7))
 	# Чёрная "ямка" под мясо — тут видна кость когда HP мало
