@@ -1486,15 +1486,7 @@ func _unhandled_input(event):
 		elif inspect_idle_timer >= INSPECT_IDLE_THRESHOLD and not is_inspecting and not is_dead:
 			_start_inspect()
 
-	# === CS-фичи: гранаты ===
-	if event is InputEventKey and event.pressed and event.keycode == KEY_G and not is_dead:
-		if smoke_grenades > 0:
-			_throw_smoke_grenade()
-			smoke_grenades -= 1
-	if event is InputEventKey and event.pressed and event.keycode == KEY_V and not is_dead:
-		if flash_grenades > 0:
-			_throw_flash_grenade()
-			flash_grenades -= 1
+	# Гранаты убраны по просьбе игрока.
 
 	# === Snipe / AWP scope (ПКМ при наличии AWP в руках) ===
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -1515,7 +1507,10 @@ func _unhandled_input(event):
 		if has_pickaxe:
 			using_pickaxe = true
 
-	# Scroll activation: 3 = slot 1, 4 = slot 2 (legacy)
+	# Свитки: X — использовать ближайший доступный свиток (удобная общая кнопка).
+	# 3/4 оставлены как альтернатива на ПК для выбора слота.
+	if event is InputEventKey and event.pressed and event.keycode == KEY_X and not is_dead:
+		_use_next_scroll()
 	if event is InputEventKey and event.pressed and event.keycode == KEY_3:
 		if scrolls.size() > 0:
 			_use_scroll(0)
@@ -2196,8 +2191,12 @@ func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO):
 		died.emit()
 
 func _get_aim_direction() -> Vector2:
-	# 8-направленное прицеливание: WASD задаёт направление стрельбы.
-	# Если ничего не нажато — стреляет вперёд по направлению взгляда.
+	# На ПК луки и AWP наводятся МЫШКОЙ — стреляем в сторону курсора.
+	if not (OS.get_name() == "Android" or OS.get_name() == "iOS"):
+		var to_mouse := get_global_mouse_position() - (global_position + Vector2(0, -10))
+		if to_mouse.length() > 4.0:
+			return to_mouse.normalized()
+	# Телефон / нет мыши: 8-направленное прицеливание (WASD/джойстик) или взгляд.
 	var aim := Vector2.ZERO
 	if Input.is_action_pressed("move_up"):
 		aim.y -= 1.0
@@ -2413,6 +2412,24 @@ func pickup_scroll(scroll_id: String):
 	var scroll_names = {"dash": "РЫВОК", "kick": "УДАР НОГОЙ", "speed_boost": "УСКОРЕНИЕ", "choke": "УДУШЕНИЕ", "slide": "ПОДКАТ"}
 	weapon_pickup_msg = "СВИТОК: " + scroll_names.get(scroll_id, scroll_id)
 	weapon_msg_timer = 2.0
+
+func _use_next_scroll():
+	# Использует первый свиток не на кулдауне (удобная одна кнопка X / СВИТ).
+	if scrolls.is_empty():
+		weapon_pickup_msg = "Нет свитков"
+		weapon_msg_timer = 0.6
+		return
+	for i in scrolls.size():
+		var sid = scrolls[i]
+		if scroll_cooldowns.get(sid, 0.0) <= 0.0:
+			_use_scroll(i)
+			return
+	# Все на кулдауне — покажем минимальный КД
+	var best := 99.0
+	for sid in scrolls:
+		best = minf(best, scroll_cooldowns.get(sid, 0.0))
+	weapon_pickup_msg = "Свитки на КД: %.1f" % best
+	weapon_msg_timer = 0.6
 
 func _use_scroll(slot: int):
 	if slot >= scrolls.size():

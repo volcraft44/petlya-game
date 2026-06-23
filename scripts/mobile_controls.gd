@@ -129,6 +129,8 @@ func _create_buttons() -> void:
 	_add(Rect2(e_x, e_y, sml, sml), "E", "", "e_key")
 	# Лечение — слева от E
 	_add(Rect2(e_x - gap - sml, e_y, sml, sml), "ЛЕЧ", "", "h_key")
+	# Свиток — над E (использует ближайший доступный свиток)
+	_add(Rect2(e_x, e_y - gap - sml, sml, sml), "СВИТ", "", "x_key")
 
 	# Пауза — верх по центру (нужна редко)
 	_add(Rect2(W * 0.5 - 34, pad, 68, 68), "II", "", "esc_key")
@@ -280,6 +282,9 @@ func _send_special(sp: String, pressed: bool) -> void:
 			# Двери/предметы ловят именно клавишу E (а не action), плюс
 			# "interact" в input map тоже привязан к E — так работает всё.
 			_send_key(KEY_E, pressed)
+		"x_key":
+			# Свиток — клавиша X
+			_send_key(KEY_X, pressed)
 		"esc_key":
 			# Пауза/настройки — шлём Escape (только на нажатие, не на отпускание)
 			if pressed:
@@ -319,6 +324,8 @@ func _button_color(b) -> Color:
 		return Color(0.20, 0.75, 0.40)
 	if sp == "e_key":
 		return Color(0.85, 0.80, 0.20)
+	if sp == "x_key":
+		return Color(0.30, 0.70, 0.85)
 	return Color(0.25, 0.25, 0.30)
 
 func _on_draw() -> void:
