@@ -2011,6 +2011,10 @@ func _draw_detailed_minimap(screen_size: Vector2, room):
 	var py = map_h / float(grows)
 	var mx = screen_size.x - map_w - 10.0
 	var my = screen_size.y - map_h - 36.0
+	# На телефоне миникарта внизу-справа перекрывалась бы кнопкой ПРЫЖ —
+	# переносим вверх-вправо (там свободно).
+	if _hud_low_end:
+		my = 30.0
 
 	# Фон-панель + заголовок
 	draw_node.draw_rect(Rect2(mx - 5, my - 18, map_w + 10, map_h + 22),
@@ -2193,6 +2197,8 @@ func _draw_grid_minimap(screen_size: Vector2):
 	var map_h = rows * cell_h + (rows - 1) * gap
 	var mx = screen_size.x - map_w - 10
 	var my = screen_size.y - map_h - 36  # above hotbar
+	if _hud_low_end:
+		my = 30.0   # вверх-вправо, чтобы не перекрывалось кнопкой прыжка
 
 	# Background panel
 	draw_node.draw_rect(Rect2(mx - 5, my - 16, map_w + 10, map_h + 20), Color(0, 0, 0, 0.72))
