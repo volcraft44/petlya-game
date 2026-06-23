@@ -612,9 +612,10 @@ func _load_room():
 			player.level_modifier = ""
 			player.damage_mult = 1.0
 			player.taken_damage_mult = 1.0
-		# Предлагаем модификатор с уровня 2+ (25% шанс — не каждый уровень)
-		if current_level >= 2 and randf() < 0.25:
-			call_deferred("_offer_level_modifier")
+		# Модификаторы уровня отключены (по просьбе игрока — «2x урон»,
+		# «+урон но −HP/сек» и т.п. делали игру неиграбельной).
+		# if current_level >= 2 and randf() < 0.25:
+		# 	call_deferred("_offer_level_modifier")
 
 	current_room.setup(current_level, enemy_scene, player)
 	current_room.room_cleared.connect(_on_room_cleared)
@@ -2200,7 +2201,10 @@ func _on_relic_chosen(rid: String):
 		player.add_relic(rid)
 
 func _show_boss_bonus_case():
-	# CS-стиль case opening: лента из 30 рандомных оружий → побеждает одно по weighted rarity
+	# CS-стиль открытие кейса УБРАНО по просьбе игрока — сразу обычный выбор бонуса.
+	_show_boss_bonus()
+	return
+	# (старый код рулетки-кейса ниже не выполняется)
 	if not cs_overlay or not player:
 		_show_boss_bonus()
 		return
