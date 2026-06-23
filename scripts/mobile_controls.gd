@@ -77,42 +77,46 @@ func _create_buttons() -> void:
 	#  • верх-право: вспомогательные (E — взаимодействие, ЛЕЧ) — не мешают
 	buttons.clear()
 
-	var pad := 30.0
-	var gap := 14.0
+	var pad := 28.0
+	var gap := 16.0
 	var H := vh
 	var W := vw
 
-	var jbs := 140.0   # Прыжок — самая большая
-	var abs_ := 126.0  # Атака — большая
-	var mbs := 98.0    # рывок / спец
-	var ssb := 88.0    # вспомогательные (верхний угол)
+	# Всё в зоне большого пальца справа-снизу. Две главные кнопки (АТАКА,
+	# ПРЫЖОК) — самые большие и в самом удобном месте. Над ними — рывок и спец.
+	# Лечение и E — на правом краю чуть выше (легко дотянуться), не в углу.
+	var big := 150.0    # главные: прыжок/атака
+	var mid := 104.0    # рывок/спец
+	var sml := 92.0     # лечение / E
 
-	# ── Низ-право: основной кластер ──
-	var jump_x := W - pad - jbs
-	var jump_y := H - pad - jbs
-	_add(Rect2(jump_x, jump_y, jbs, jbs), "ПРЫГ", "jump", "")
+	# Прыжок — правый нижний угол
+	var jump_x := W - pad - big
+	var jump_y := H - pad - big
+	_add(Rect2(jump_x, jump_y, big, big), "ПРЫЖ", "jump", "")
 
-	var atk_x := jump_x - gap - abs_
-	var atk_y := H - pad - abs_
-	_add(Rect2(atk_x, atk_y, abs_, abs_), "АТАКА", "", "lmb")
+	# Атака — слева от прыжка (низ выровнен)
+	var atk_x := jump_x - gap - big
+	var atk_y := jump_y
+	_add(Rect2(atk_x, atk_y, big, big), "АТАКА", "", "lmb")
 
-	# РЫВОК над атакой, СПЕЦ над прыжком
-	var dash_x := atk_x + (abs_ - mbs) * 0.5
-	var dash_y := atk_y - gap - mbs
-	_add(Rect2(dash_x, dash_y, mbs, mbs), "РЫВ", "", "ctrl")
+	# Рывок над атакой, Спец над прыжком
+	var dash_x := atk_x + (big - mid) * 0.5
+	var dash_y := atk_y - gap - mid
+	_add(Rect2(dash_x, dash_y, mid, mid), "РЫВОК", "", "ctrl")
 
-	var spec_x := jump_x + (jbs - mbs) * 0.5
-	var spec_y := jump_y - gap - mbs
-	_add(Rect2(spec_x, spec_y, mbs, mbs), "СПЕЦ", "", "rmb")
+	var spec_x := jump_x + (big - mid) * 0.5
+	var spec_y := jump_y - gap - mid
+	_add(Rect2(spec_x, spec_y, mid, mid), "СПЕЦ", "", "rmb")
 
-	# ── Верх-право: вспомогательные (взаимодействие и лечение) ──
-	var e_x := W - pad - ssb
-	var e_y := pad
-	_add(Rect2(e_x, e_y, ssb, ssb), "E", "", "e_key")
-	_add(Rect2(e_x - gap - ssb, e_y, ssb, ssb), "ЛЕЧ", "", "h_key")
+	# E (двери/предметы) — правый край, выше спеца (часто нужна — близко)
+	var e_x := W - pad - sml
+	var e_y := spec_y - gap - sml
+	_add(Rect2(e_x, e_y, sml, sml), "E", "", "e_key")
+	# Лечение — слева от E
+	_add(Rect2(e_x - gap - sml, e_y, sml, sml), "ЛЕЧ", "", "h_key")
 
-	# ── Верх-лево: пауза/настройки (по центру сверху, маленькая) ──
-	_add(Rect2(W * 0.5 - 32, pad, 64, 64), "II", "", "esc_key")
+	# Пауза — верх по центру (нужна редко)
+	_add(Rect2(W * 0.5 - 34, pad, 68, 68), "II", "", "esc_key")
 
 	if draw_node:
 		draw_node.queue_redraw()

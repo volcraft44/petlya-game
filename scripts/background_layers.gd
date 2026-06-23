@@ -115,8 +115,13 @@ func _on_draw() -> void:
 	if camera_node and is_instance_valid(camera_node):
 		cam_pos = camera_node.global_position
 
-	# Рисуем слои силуэтов
+	# Рисуем слои силуэтов. На телефоне пропускаем — это ~50 лишних отрисовок
+	# каждый кадр, а за основным фоном их почти не видно.
 	var fog_col = _fog_color_for_biome()
+	if OS.get_name() == "Android" or OS.get_name() == "iOS":
+		_draw_node.draw_rect(Rect2(0, 0, vs.x, vs.y),
+			Color(fog_col.r, fog_col.g, fog_col.b, 0.16))
+		return
 	for li in _layers.size():
 		var layer_data = _layers[li]
 		var p = layer_data.parallax
