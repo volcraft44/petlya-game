@@ -175,6 +175,11 @@ func _ready():
 	# Загружаем сохранённые настройки (громкость, sfx, тряска, лимит FPS)
 	_load_settings()
 	Engine.max_fps = settings_fps_options[settings_fps_idx]
+	# Физика на телефоне — 30 Гц вместо 60 (с интерполяцией движение остаётся
+	# плавным, но CPU-нагрузка физики/коллизий вдвое меньше). Это бьёт по
+	# главному оставшемуся узкому месту — процессорному времени.
+	if _low_end:
+		Engine.physics_ticks_per_second = 30
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(settings_master_vol / 100.0))
 	# На телефоне рендерим в БАЗОВОМ разрешении 1280x768 и растягиваем на экран.
 	# С режимом canvas_items игра рисовалась в родном разрешении телефона
