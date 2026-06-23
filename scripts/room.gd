@@ -4011,21 +4011,26 @@ func _get_visible_tile_range() -> Array:
 		center = player_ref.global_position
 	else:
 		return [0, grid_cols, 0, grid_rows]
-	var halfx := 260.0
-	var halfy := 170.0
+	var halfx := 220.0 + RECULL_DIST + 32.0
+	var halfy := 140.0 + RECULL_DIST + 32.0
 	var c0 := clampi(int((center.x - halfx) / tile_size), 0, grid_cols)
 	var c1 := clampi(int((center.x + halfx) / tile_size) + 1, 0, grid_cols)
 	var r0 := clampi(int((center.y - halfy) / tile_size), 0, grid_rows)
 	var r1 := clampi(int((center.y + halfy) / tile_size) + 1, 0, grid_rows)
 	return [c0, c1, r0, r1]
 
-var _last_draw_vr: Array = [-1, -1, -1, -1]
+const RECULL_DIST := 110.0
+var _last_cull_pos: Vector2 = Vector2(-99999, -99999)
+var _room_low_end: bool = OS.has_feature("mobile")
 
 func _check_draw_cull() -> void:
-	# Перерисовываем комнату только когда видимая область тайлов сменилась
-	var vr = _get_visible_tile_range()
-	if vr != _last_draw_vr:
-		_last_draw_vr = vr
+	# Перерисовываем комнату только когда игрок ушёл дальше порога — а не
+	# каждый тайл. Раньше room._draw (тяжёлый ~3мс/27мс на телефоне)
+	# перестраивался ~9 раз/сек при ходьбе = главная просадка в движении.
+	if player_ref == null or not is_instance_valid(player_ref):
+		return
+	if player_ref.global_position.distance_to(_last_cull_pos) > RECULL_DIST:
+		_last_cull_pos = player_ref.global_position
 		queue_redraw()
 
 func _draw_wall_background():
@@ -4313,8 +4318,9 @@ func _draw_body():
 	if is_lava_boss:
 		_draw_rising_lava()
 
-	# Decorations
-	if not is_boss_room:
+	# Decorations — пропускаем на телефоне (сталактиты/грибы/лозы дорогие в
+	# отрисовке, а room._draw перестраивается при ходьбе).
+	if not is_boss_room and not _room_low_end:
 		_draw_decorations()
 
 	# Ore blocks

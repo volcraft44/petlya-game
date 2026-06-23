@@ -19,14 +19,25 @@ func render(p_room) -> void:
 	_last_vr = _vr
 	queue_redraw()
 
+var _last_cull_pos: Vector2 = Vector2(-99999, -99999)
+# Перестраиваем тайлы только когда игрок ушёл дальше этого порога — а не
+# каждый тайл. Это убирает постоянное перестроение _draw при ходьбе (главная
+# причина просадок в движении). Запас отрисовки (margin) покрывает порог.
+const RECULL_DIST := 110.0
+
 func _process(_delta: float) -> void:
 	if room == null:
 		return
-	var nr := _compute_visible_range()
-	# Перерисовываем только если видимая область тайлов изменилась
-	if nr != _last_vr:
-		_last_vr = nr
-		_vr = nr
+	var p = room.player_ref
+	if p == null or not is_instance_valid(p):
+		if _last_cull_pos.x < -9000:
+			_vr = _compute_visible_range()
+			queue_redraw()
+			_last_cull_pos = Vector2.ZERO
+		return
+	if p.global_position.distance_to(_last_cull_pos) > RECULL_DIST:
+		_last_cull_pos = p.global_position
+		_vr = _compute_visible_range()
 		queue_redraw()
 
 func _compute_visible_range() -> Rect2i:
@@ -35,17 +46,16 @@ func _compute_visible_range() -> Rect2i:
 	var ts: int = room.tile_size
 	if ts <= 0:
 		return Rect2i(0, 0, room.grid_cols, room.grid_rows)
-	# Центр — позиция игрока (камера следует за ним). Это надёжнее, чем
-	# get_camera_2d(), который мог возвращать null → рисовалась вся комната.
 	var center: Vector2
 	var p = room.player_ref
 	if p and is_instance_valid(p):
 		center = p.global_position
 	else:
 		center = Vector2(room.room_width, room.room_height) * 0.5
-	# Видимая полузона при зуме 2.9 ≈ 220x132px. Берём с запасом (lookahead).
-	var halfx := 260.0
-	var halfy := 170.0
+	# Видимая полузона ~220x132px + запас на RECULL_DIST, чтобы при ходьбе
+	# не выезжали края до следующего перестроения.
+	var halfx := 220.0 + RECULL_DIST + 32.0
+	var halfy := 140.0 + RECULL_DIST + 32.0
 	var x0 := clampi(int((center.x - halfx) / ts), 0, room.grid_cols)
 	var x1 := clampi(int((center.x + halfx) / ts) + 1, 0, room.grid_cols)
 	var y0 := clampi(int((center.y - halfy) / ts), 0, room.grid_rows)
