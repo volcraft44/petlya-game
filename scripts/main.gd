@@ -92,7 +92,7 @@ var settings_shake: bool = true
 # Лимит FPS: варианты (0 = без лимита). Меняется в настройках.
 var settings_fps_options: Array = [30, 60, 90, 120, 144, 0]
 var settings_fps_idx: int = 1   # выставится в _ready по платформе
-const SETTINGS_COUNT := 4   # пунктов в меню настроек (громкость, sfx, тряска, fps)
+const SETTINGS_COUNT := 5   # громкость, sfx, тряска, fps, психоделика
 var tutorial_requested: bool = false
 
 # Post-boss bonus
@@ -138,6 +138,12 @@ var _fps_layer: CanvasLayer
 var _fps_label: Label
 var _fps_cd: float = 0.0
 
+# Психоделический полноэкранный шейдер
+var _psy_mat: ShaderMaterial = null
+var _psy_layer: CanvasLayer = null
+var settings_psy: int = 1   # 0=выкл, 1=слабо, 2=средне, 3=сильно
+const PSY_LEVELS := [0.0, 0.30, 0.6, 1.0]
+
 
 # Низкое железо (телефон): на нём выключаем весь динамический свет —
 # главный пожиратель FPS в 2D — и держим сцену яркой через ambient.
@@ -161,6 +167,7 @@ func _load_settings():
 		settings_sfx_vol = cfg.get_value("audio", "sfx", settings_sfx_vol)
 		settings_shake = cfg.get_value("game", "shake", settings_shake)
 		settings_fps_idx = clampi(cfg.get_value("game", "fps_idx", settings_fps_idx), 0, settings_fps_options.size() - 1)
+		settings_psy = clampi(cfg.get_value("game", "psy", settings_psy), 0, 3)
 
 func _save_settings():
 	var cfg := ConfigFile.new()
@@ -168,6 +175,7 @@ func _save_settings():
 	cfg.set_value("audio", "sfx", settings_sfx_vol)
 	cfg.set_value("game", "shake", settings_shake)
 	cfg.set_value("game", "fps_idx", settings_fps_idx)
+	cfg.set_value("game", "psy", settings_psy)
 	cfg.save(SETTINGS_PATH)
 
 func _ready():
@@ -197,6 +205,27 @@ func _ready():
 	camera.position_smoothing_speed = 8.0
 	add_child(camera)
 	camera.make_current()  # гарантируем, что это активная камера (для куллинга тайлов)
+
+	# === Психоделический шейдер (слой 40: поверх мира, под UI) ===
+	# BackBufferCopy копирует мир → ColorRect перерисовывает его искажённым.
+	# UI (управление/HUD на слоях 50+) остаётся чётким.
+	_psy_layer = CanvasLayer.new()
+	var psy_layer := _psy_layer
+	psy_layer.layer = 40
+	psy_layer.visible = settings_psy > 0   # выключен → нет копии экрана/шейдера
+	add_child(psy_layer)
+	var bbc := BackBufferCopy.new()
+	bbc.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	psy_layer.add_child(bbc)
+	var psy_rect := ColorRect.new()
+	psy_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	psy_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_psy_mat = ShaderMaterial.new()
+	_psy_mat.shader = load("res://shaders/psychedelic.gdshader")
+	_psy_mat.set_shader_parameter("intensity", PSY_LEVELS[settings_psy])
+	_psy_mat.set_shader_parameter("surge", 0.0)
+	psy_rect.material = _psy_mat
+	psy_layer.add_child(psy_rect)
 
 	# Тёмный лиловый сумрак — атмосферно но не светло.
 	darkness = CanvasModulate.new()
@@ -1264,6 +1293,13 @@ func _end_insanity_sequence() -> void:
 # ───────────────────────────────────────────────────────────────────────────
 
 func _process(delta):
+	# Психоделика усиливается при низком HP («штырит» сильнее у смерти)
+	if _psy_mat and settings_psy > 0 and player and is_instance_valid(player) and not player.is_dead:
+		var hp_frac := float(player.health) / float(maxi(player.max_health, 1))
+		var surge := 0.0
+		if hp_frac < 0.35:
+			surge = (0.35 - hp_frac) / 0.35 * 0.30
+		_psy_mat.set_shader_parameter("surge", surge)
 	if _fps_label:
 		_fps_cd -= delta
 		if _fps_cd <= 0.0:
@@ -1364,7 +1400,7 @@ func _pause_confirm():
 		0: _unpause()
 		1:
 			settings_open = true
-			hud.show_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake, settings_fps_options[settings_fps_idx])
+			hud.show_settings(settings_selection, settings_master_vol, settings_sfx_vol, settings_shake, settings_fps_options[settings_fps_idx], settings_psy)
 		2:
 			_unpause()
 			tutorial_requested = true
@@ -1375,7 +1411,7 @@ func _pause_confirm():
 
 func _sync_settings_hud():
 	hud.update_settings(settings_selection, settings_master_vol, settings_sfx_vol,
-		settings_shake, settings_fps_options[settings_fps_idx])
+		settings_shake, settings_fps_options[settings_fps_idx], settings_psy)
 
 func _settings_adjust(dir: int):
 	match settings_selection:
@@ -1390,6 +1426,12 @@ func _settings_adjust(dir: int):
 			# Циклически меняем лимит FPS и сразу применяем
 			settings_fps_idx = (settings_fps_idx + dir + settings_fps_options.size()) % settings_fps_options.size()
 			Engine.max_fps = settings_fps_options[settings_fps_idx]
+		4:
+			settings_psy = clampi(settings_psy + dir, 0, 3)
+			if _psy_mat:
+				_psy_mat.set_shader_parameter("intensity", PSY_LEVELS[settings_psy])
+			if _psy_layer:
+				_psy_layer.visible = settings_psy > 0
 	_save_settings()
 	_sync_settings_hud()
 

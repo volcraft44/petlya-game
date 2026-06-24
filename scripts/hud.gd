@@ -84,6 +84,7 @@ var settings_master_vol: float = 80.0
 var settings_sfx_vol: float = 60.0
 var settings_shake: bool = true
 var settings_fps: int = 60
+var settings_psy: int = 1
 
 # === ECONOMY & PROGRESSION ===
 var coins: int = 0
@@ -1822,21 +1823,23 @@ func _draw_boss_bonus(screen_size: Vector2):
 	draw_node.draw_string(ThemeDB.fallback_font, Vector2(cx, screen_size.y * 0.82),
 		"W/S выбор   Enter принять", HORIZONTAL_ALIGNMENT_CENTER, -1, 8, Color(0.5, 0.5, 0.5))
 
-func show_settings(sel: int, master: float, sfx: float, shake: bool, fps: int = 60):
+func show_settings(sel: int, master: float, sfx: float, shake: bool, fps: int = 60, psy: int = 1):
 	settings_visible = true
 	settings_selection = sel
 	settings_master_vol = master
 	settings_sfx_vol = sfx
 	settings_shake = shake
 	settings_fps = fps
+	settings_psy = psy
 	draw_node.queue_redraw()
 
-func update_settings(sel: int, master: float, sfx: float, shake: bool, fps: int = 60):
+func update_settings(sel: int, master: float, sfx: float, shake: bool, fps: int = 60, psy: int = 1):
 	settings_selection = sel
 	settings_master_vol = master
 	settings_sfx_vol = sfx
 	settings_shake = shake
 	settings_fps = fps
+	settings_psy = psy
 	draw_node.queue_redraw()
 
 func hide_settings():
@@ -1852,7 +1855,7 @@ func _draw_settings_screen(screen_size: Vector2):
 
 	# Panel
 	var pw = 240.0
-	var ph = 200.0
+	var ph = 236.0
 	draw_node.draw_rect(Rect2(cx - pw / 2, cy - ph / 2, pw, ph), Color(0.08, 0.08, 0.12, 0.97))
 	draw_node.draw_rect(Rect2(cx - pw / 2, cy - ph / 2, pw, ph), Color(0.4, 0.4, 0.6, 0.8), false, 2.0)
 
@@ -1860,12 +1863,12 @@ func _draw_settings_screen(screen_size: Vector2):
 	draw_node.draw_string(ThemeDB.fallback_font, Vector2(cx, cy - ph / 2 + 16),
 		"НАСТРОЙКИ", HORIZONTAL_ALIGNMENT_CENTER, -1, 16, Color(1, 0.9, 0.4))
 
-	# Items: master vol, sfx vol, screen shake, fps limit
-	var labels = ["Громкость:", "Звуки:", "Тряска экрана:", "Лимит FPS:"]
-	var row_h = 36.0
-	var start_y = cy - ph / 2 + 44.0
+	# Items: master vol, sfx vol, screen shake, fps limit, psychedelic
+	var labels = ["Громкость:", "Звуки:", "Тряска экрана:", "Лимит FPS:", "Психоделика:"]
+	var row_h = 34.0
+	var start_y = cy - ph / 2 + 42.0
 
-	for i in 4:
+	for i in 5:
 		var ry = start_y + i * row_h
 		var selected = (i == settings_selection)
 		var label_col = Color(1, 1, 1) if selected else Color(0.6, 0.6, 0.6)
@@ -1887,11 +1890,17 @@ func _draw_settings_screen(screen_size: Vector2):
 			var toggle_col = Color(0.3, 1, 0.3) if settings_shake else Color(1, 0.4, 0.4)
 			draw_node.draw_string(ThemeDB.fallback_font, Vector2(cx + 14, ry + 14),
 				toggle_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, toggle_col)
-		else:
+		elif i == 3:
 			var fps_text = "БЕЗ ЛИМИТА" if settings_fps == 0 else str(settings_fps)
 			var fps_col = Color(0.4, 0.9, 1.0) if selected else Color(0.7, 0.8, 0.9)
 			draw_node.draw_string(ThemeDB.fallback_font, Vector2(cx + 14, ry + 14),
 				"< " + fps_text + " >", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, fps_col)
+		else:
+			var psy_names = ["ВЫКЛ", "СЛАБО", "СРЕДНЕ", "СИЛЬНО"]
+			var psy_text = psy_names[clampi(settings_psy, 0, 3)]
+			var psy_col = Color(0.85, 0.5, 1.0) if selected else Color(0.7, 0.6, 0.85)
+			draw_node.draw_string(ThemeDB.fallback_font, Vector2(cx + 14, ry + 14),
+				"< " + psy_text + " >", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, psy_col)
 
 	# Hint
 	draw_node.draw_string(ThemeDB.fallback_font, Vector2(cx, cy + ph / 2 - 14),
