@@ -242,6 +242,12 @@ const DN_NAMES := ["Райто", "Эл", "Миса", "Кира", "Рюк", "Ре
 	"Найт", "Мелло", "Матт", "Ниа", "Така", "Сайу", "Аидзава", "Моги",
 	"Укита", "Мацуда", "Идэ", "Ватари", "Хигучи"]
 
+func _dn_already(e) -> bool:
+	for dt in death_note_targets:
+		if dt.enemy == e:
+			return true
+	return false
+
 func _start_death_note_writing():
 	if dn_writing:
 		return
@@ -249,16 +255,17 @@ func _start_death_note_writing():
 	if room == null:
 		return
 	dn_queue.clear()
+	# Все враги в радиусе
 	for e in room.enemies:
 		if is_instance_valid(e) and global_position.distance_to(e.global_position) <= DN_RADIUS:
-			# уже записанных не добавляем повторно
-			var marked := false
-			for dt in death_note_targets:
-				if dt.enemy == e:
-					marked = true
-					break
-			if not marked:
+			if not _dn_already(e):
 				dn_queue.append(e)
+	# Босс комнаты (отдельная нода) — тоже в радиусе
+	if "golem_boss" in room and room.golem_boss != null and is_instance_valid(room.golem_boss):
+		if room.golem_boss.has_method("take_damage") and \
+			global_position.distance_to(room.golem_boss.global_position) <= DN_RADIUS:
+			if not _dn_already(room.golem_boss):
+				dn_queue.append(room.golem_boss)
 	if dn_queue.is_empty():
 		weapon_pickup_msg = "Нет целей рядом"
 		weapon_msg_timer = 0.6
@@ -605,7 +612,24 @@ func _process(delta):
 			dt.enemy.queue_redraw()
 		if dt.timer <= 0:
 			if is_instance_valid(dt.enemy) and dt.enemy.has_method("take_damage"):
-				dt.enemy.take_damage(99999, Vector2.ZERO)
+				# Боссы/мини-боссы/толстые враги НЕ ван-шотятся: им наносится
+				# крупный, но конечный урон (≈40% макс. HP). Обычные враги —
+				# мгновенная смерть.
+				var is_tough := false
+				if "is_miniboss" in dt.enemy and dt.enemy.is_miniboss:
+					is_tough = true
+				if "is_boss" in dt.enemy and dt.enemy.is_boss:
+					is_tough = true
+				var mhp := 0
+				if "max_health" in dt.enemy:
+					mhp = int(dt.enemy.max_health)
+				if mhp > 250:
+					is_tough = true
+				if is_tough:
+					var dn_dmg := maxi(60, int(mhp * 0.40))
+					dt.enemy.take_damage(dn_dmg, Vector2.ZERO)
+				else:
+					dt.enemy.take_damage(99999, Vector2.ZERO)
 			death_note_targets.remove_at(i)
 		elif not is_instance_valid(dt.enemy):
 			death_note_targets.remove_at(i)
