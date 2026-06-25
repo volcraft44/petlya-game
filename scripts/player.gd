@@ -106,6 +106,11 @@ var stun_timer: float = 0.0
 var heal_charges: int = 3
 var max_heal_charges: int = 3
 var heal_amount: int = 20
+# Питьё зелья: длится ~3 сек, всё это время персонаж стоит и не атакует.
+var is_drinking: bool = false
+var drink_timer: float = 0.0
+var drink_heal_amount: int = 0
+const DRINK_TIME := 3.0
 
 # Blade upgrade (from chests)
 var has_blade: bool = false
@@ -227,6 +232,7 @@ var grab_timer: float = 0.0  # 3s squeeze
 var axe_combo: int = 0    # Axe combo counter
 var chain_target: CharacterBody2D = null  # Chain pull target
 var chain_timer: float = 0.0
+var chain_anim: float = 0.0  # таймер анимации броска/натяжения цепи
 var spin_active: bool = false  # Morningstar spin
 var spin_timer: float = 0.0
 var constrict_targets: Array = []  # Snake hand targets
@@ -412,9 +418,9 @@ const INSPECT_DURATION: float = 2.4
 # AWP-scope state
 var is_scoping: bool = false
 var scope_zoom_target: float = 1.8
-# Гранаты-расходники (стартовые)
-var smoke_grenades: int = 2
-var flash_grenades: int = 2
+# Гранаты убраны по просьбе игрока (стартовое значение 0 — нигде не выдаются).
+var smoke_grenades: int = 0
+var flash_grenades: int = 0
 # Crosshair style (для дальнобойного оружия)
 var crosshair_style: int = 2  # 0=arrow, 1=dot, 2=cross (default), 3=t-shape, 4=x
 
@@ -681,6 +687,8 @@ func _process(delta):
 	# Chain pull
 	if chain_target and is_instance_valid(chain_target):
 		chain_timer -= delta
+		chain_anim += delta
+		queue_redraw()  # анимация цепи каждый кадр пока активна
 		if chain_timer > 2.0:
 			# Pulling phase (1 second) — pull enemy toward player fast
 			var pull_dir = (global_position - chain_target.global_position).normalized()
@@ -842,6 +850,21 @@ func _physics_process(delta):
 		velocity.x = 0.0
 		velocity.y += gravity * delta   # гравитация работает (не зависает в воздухе)
 		move_and_slide()
+		return
+
+	# Лечение-зелье: пьём ~3 сек, в это время нельзя двигаться/бить.
+	if is_drinking:
+		drink_timer -= delta
+		velocity.x = 0.0
+		velocity.y += gravity * delta
+		move_and_slide()
+		queue_redraw()
+		if drink_timer <= 0.0 or is_dead:
+			if not is_dead:
+				heal(drink_heal_amount)
+			is_drinking = false
+			can_attack = true
+			weapon_pickup_msg = ""
 		return
 
 	# Автоатака при ЗАЖАТОЙ ЛКМ — бьём с максимальной скоростью оружия,
@@ -1545,25 +1568,35 @@ func _unhandled_input(event):
 					# No target — just dash forward
 					velocity.x = lside * 350
 					velocity.y = -120
-			# Chain pull — RMB throws chain to grab nearest enemy
+			# Chain pull — ЦЕПЬ кидается в сторону ПРИЦЕЛА (как лук): целимся
+			# мышкой/направлением и цепляем врага, который лучше всего совпал
+			# с лучом прицеливания.
 			elif special == "chain_pull" and chain_target == null:
-				var chain_dir = 1.0 if facing_right else -1.0
+				var aim := _get_aim_direction()
 				var chain_room = _find_room()
 				if chain_room:
 					var best_enemy = null
-					var best_dist = 120.0  # Max chain range
+					var best_score = 0.55      # минимальное совпадение с прицелом (cos угла)
+					var max_range = 170.0      # дальность цепи
 					for enemy in chain_room.enemies:
 						if is_instance_valid(enemy):
-							var ex = enemy.global_position.x - global_position.x
-							var ey = abs(enemy.global_position.y - global_position.y)
-							if ey < 30 and ((chain_dir > 0 and ex > 0 and ex < best_dist) or (chain_dir < 0 and ex < 0 and abs(ex) < best_dist)):
-								best_dist = abs(ex)
-								best_enemy = enemy
+							var to_e = enemy.global_position - global_position
+							var d = to_e.length()
+							if d > 8.0 and d < max_range:
+								var aligned = aim.dot(to_e / d)
+								if aligned > best_score:
+									best_score = aligned
+									best_enemy = enemy
 					if best_enemy:
 						chain_target = best_enemy
 						chain_timer = 3.0
+						chain_anim = 0.0
+						facing_right = best_enemy.global_position.x >= global_position.x
 						weapon_pickup_msg = "ЗАЦЕП!"
 						weapon_msg_timer = 1.0
+					else:
+						weapon_pickup_msg = "ПРОМАХ"
+						weapon_msg_timer = 0.5
 			# Morningstar spin
 			elif special == "spin_attack" and not spin_active:
 				spin_active = true
@@ -1621,17 +1654,29 @@ func _unhandled_input(event):
 			_use_scroll(1)
 
 
-	# Heal on H — лечит 20% от макс HP (масштабируется с ростом макс HP)
+	# Heal on H — лечит 20% от макс HP. Теперь это ПИТЬЁ ЗЕЛЬЯ ~3 сек:
+	# заряд тратится сразу, и всё время питья нельзя двигаться/бить.
 	if event is InputEventKey and event.pressed and event.keycode == KEY_H:
-		if heal_charges > 0 and health < max_health and not is_dead:
+		if heal_charges > 0 and health < max_health and not is_dead \
+			and not is_drinking and not dn_writing and not is_rolling:
 			heal_charges -= 1
-			heal(maxi(1, int(max_health * 0.20)))
+			_start_drinking(maxi(1, int(max_health * 0.20)))
 
-	# Flask on F — 20% от макс HP
+	# Flask on F — то же зелье из фляги
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
-		if has_flask and flask_charges > 0 and health < max_health and not is_dead:
+		if has_flask and flask_charges > 0 and health < max_health and not is_dead \
+			and not is_drinking and not dn_writing and not is_rolling:
 			flask_charges -= 1
-			heal(maxi(1, int(max_health * 0.20)))
+			_start_drinking(maxi(1, int(max_health * 0.20)))
+
+func _start_drinking(amount: int) -> void:
+	is_drinking = true
+	drink_timer = DRINK_TIME
+	drink_heal_amount = amount
+	can_attack = false
+	velocity.x = 0.0
+	weapon_pickup_msg = "Пьёт зелье…"
+	weapon_msg_timer = DRINK_TIME
 
 func _do_attack():
 	_break_invisibility()
@@ -1839,11 +1884,8 @@ func _on_attack_hit(body) -> bool:
 				if not ("is_boss" in body and body.is_boss):
 					dmg = 99999  # Instant kill
 
-		# Chain pull — grab and strangle
-		if special == "chain_pull" and chain_target == null:
-			chain_target = body
-			chain_timer = 3.0  # 1s pull + 2s strangle
-			dmg = 0  # No initial damage
+		# Цепь больше НЕ цепляет при касании в ближнем бою — только прицельным
+		# броском по ПКМ (см. блок chain_pull в обработке ПКМ).
 
 		# Snake hand — poison (kills in ~5s)
 		if special == "constrict":
@@ -2114,6 +2156,9 @@ func equip_weapon(weapon_id: int):
 	spear_lunge_timer = 0.0
 	chain_target = null
 	chain_timer = 0.0
+	chain_anim = 0.0
+	is_drinking = false
+	drink_timer = 0.0
 	grab_target = null
 	grab_timer = 0.0
 	ground_slam = false
@@ -2758,8 +2803,8 @@ func add_relic(rid: String):
 			# −1 сек cd даша применит main.gd через DASH_RECHARGE_TIME
 			pass
 		"bomb_pouch":
-			smoke_grenades += 1
-			flash_grenades += 1
+			# Гранаты убраны — перк теперь даёт немного скорости.
+			speed *= 1.05
 
 var dbg_draw_ms: float = 0.0
 
@@ -2840,7 +2885,7 @@ func _draw_body2():
 	if not is_dead and not is_knocked_out:
 		var wd_aim = weapon_data.get(current_weapon, {})
 		var sp_aim = wd_aim.get("special", "")
-		if sp_aim in ["warp_arrow", "triple_arrow", "dart_throw", "necro_souls"]:
+		if sp_aim in ["warp_arrow", "triple_arrow", "dart_throw", "necro_souls", "chain_pull"]:
 			var aim_dir = _get_aim_direction()
 			var start = Vector2(0, -10)
 			var aim_color = Color(1.0, 0.85, 0.3, 0.55)
@@ -2856,6 +2901,53 @@ func _draw_body2():
 			var t2 = tip - aim_dir * 5 + perp * 3
 			var t3 = tip - aim_dir * 5 - perp * 3
 			draw_colored_polygon(PackedVector2Array([t1, t2, t3]), aim_color)
+
+	# ── Анимированная ЦЕПЬ до зацепленного врага ──
+	if chain_target and is_instance_valid(chain_target) and not is_dead:
+		var hand := Vector2(0, -10)
+		var tgt := chain_target.global_position - global_position + Vector2(0, -8)
+		var reach := clampf(chain_anim / 0.16, 0.0, 1.0)   # выброс цепи к цели
+		var endp := hand.lerp(tgt, reach)
+		var dir_n := (endp - hand)
+		if dir_n.length() > 1.0:
+			dir_n = dir_n.normalized()
+		else:
+			dir_n = Vector2(1, 0)
+		var perp := Vector2(-dir_n.y, dir_n.x)
+		var wob := (1.0 - reach) * 5.0                     # дрожь при броске
+		var segs := 8
+		var prev := hand
+		for i in range(1, segs + 1):
+			var t := float(i) / segs
+			var p := hand.lerp(endp, t)
+			p += perp * sin(t * PI) * wob * (1.0 if (i % 2 == 0) else -1.0)
+			draw_line(prev, p, Color(0.52, 0.54, 0.60), 2.5)   # тёмное звено
+			draw_circle(p, 1.7, Color(0.74, 0.76, 0.82))       # блик звена
+			prev = p
+		draw_circle(endp, 3.2, Color(0.88, 0.89, 0.94))        # металлический крюк
+
+	# ── Анимация питья зелья ──
+	if is_drinking and not is_dead:
+		var prog := 1.0 - clampf(drink_timer / DRINK_TIME, 0.0, 1.0)  # 0→1
+		var side := 1.0 if facing_right else -1.0
+		# Рука поднимает бутылку ко рту, наклон растёт по мере питья.
+		var tilt := -0.5 - prog * 0.8
+		draw_set_transform(Vector2(4.0 * side, -18.0), tilt * side, Vector2.ONE)
+		# Бутылочка
+		draw_rect(Rect2(-2.5, -7, 5, 9), Color(0.25, 0.55, 0.85, 0.9))   # стекло
+		draw_rect(Rect2(-1.5, -10, 3, 3), Color(0.45, 0.32, 0.18))       # горлышко/пробка
+		# Остаток зелья убывает
+		var liq := (1.0 - prog) * 7.0
+		draw_rect(Rect2(-2.0, 2 - liq, 4, liq), Color(0.95, 0.25, 0.35, 0.95))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		# Кольцо прогресса над головой
+		var cseg := 20
+		var ring := PackedVector2Array()
+		for i in range(int(cseg * prog) + 1):
+			var a := -PI / 2 + float(i) / cseg * TAU
+			ring.append(Vector2(0, -30) + Vector2(cos(a), sin(a)) * 5.0)
+		for i in range(1, ring.size()):
+			draw_line(ring[i - 1], ring[i], Color(0.4, 1.0, 0.5, 0.9), 1.6)
 
 	# ── Knocked-out by mimic ──
 	if is_knocked_out:

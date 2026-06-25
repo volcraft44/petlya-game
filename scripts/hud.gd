@@ -796,31 +796,7 @@ func _on_draw():
 			draw_node.draw_string(ThemeDB.fallback_font, Vector2(180, 57),
 				"[F]x" + str(player.flask_charges), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.3, 0.8, 0.9, 0.8))
 
-		# === CS gadgets — гранаты ===
-		if "smoke_grenades" in player and player.smoke_grenades > 0:
-			# Иконка-смок: серый облачко
-			var sx = 5
-			var sy = 73
-			draw_node.draw_rect(Rect2(sx, sy, 130, 14), Color(0.06, 0.06, 0.08, 0.55))
-			# Smoke icon
-			draw_node.draw_circle(Vector2(sx + 8, sy + 7), 5, Color(0.7, 0.7, 0.75))
-			draw_node.draw_circle(Vector2(sx + 12, sy + 5), 3.5, Color(0.8, 0.8, 0.83))
-			draw_node.draw_string(ThemeDB.fallback_font, Vector2(sx + 20, sy + 11),
-				"[G] x" + str(player.smoke_grenades), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-				Color(0.85, 0.85, 0.9))
-		if "flash_grenades" in player and player.flash_grenades > 0:
-			var fx2 = 80
-			var fy2 = 73
-			# Flash icon — белая вспышка с лучами
-			draw_node.draw_circle(Vector2(fx2 + 8, fy2 + 7), 4, Color(1, 1, 0.85))
-			for i in 6:
-				var ang = float(i) / 6.0 * TAU
-				var p1 = Vector2(fx2 + 8 + cos(ang) * 5, fy2 + 7 + sin(ang) * 5)
-				var p2 = Vector2(fx2 + 8 + cos(ang) * 8, fy2 + 7 + sin(ang) * 8)
-				draw_node.draw_line(p1, p2, Color(1, 1, 0.6), 1.0)
-			draw_node.draw_string(ThemeDB.fallback_font, Vector2(fx2 + 20, fy2 + 11),
-				"[V] x" + str(player.flash_grenades), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-				Color(1, 1, 0.6))
+		# Гранаты убраны — HUD-индикаторы дыма/флэша больше не рисуются.
 
 		# === Активная СИНЕРГИЯ оружия+карты ===
 		if "current_weapon" in player and "active_card" in player:

@@ -2037,6 +2037,12 @@ func _add_wall(pos: Vector2, size: Vector2):
 	add_child(wall)
 
 func _place_chest(cx: float, cy: float, force_weapon: bool = false):
+	# Сундук ставим на РОВНЫЙ пол со свободным местом, чтобы он не оказался
+	# вмурован в стену/текстуру. Основание сундука ~ на 6px ниже его центра.
+	var cpos = _find_clear_floor(cx, cy, 2)
+	if cpos.x != INF:
+		cx = cpos.x
+		cy = cpos.y - 6
 	# Random weapon from loot table (weighted by CS-rarity)
 	var roll = randf()
 	var weapon_id: int
@@ -2364,6 +2370,42 @@ func _floor_y_in_column(px: float, py_hint: float) -> float:
 	# Пол не найден (сквозная шахта) — ставим на нижний ряд
 	return float(grid_rows - 1) * tile_size
 
+func _find_clear_floor(px: float, py_hint: float, headroom: int = 2) -> Vector2:
+	# Ищет место НА ПОЛУ со свободным пространством над головой, чтобы дверь/
+	# монстр не оказались замурованы в стене. Перебирает колонку px и соседние
+	# (±7) наружу. Возвращает мировую позицию (центр колонки, чуть выше пола)
+	# или Vector2(INF, INF), если ничего подходящего рядом нет.
+	if grid.size() == 0 or grid_cols == 0:
+		return Vector2(px, py_hint)
+	var gc0 := clampi(int(px / tile_size), 0, grid_cols - 1)
+	var gr_hint := clampi(int(py_hint / tile_size), 0, grid_rows - 1)
+	for off in range(0, 8):
+		for sgn in [0, 1, -1]:
+			if off == 0 and sgn != 0:
+				continue
+			var gc := gc0 + sgn * off
+			if gc < 1 or gc >= grid_cols - 1:
+				continue
+			# Из подсказки выходим вверх из стены, затем спускаемся до пола.
+			var gr := gr_hint
+			while gr > 1 and grid[gr][gc] == 1:
+				gr -= 1
+			while gr + 1 < grid_rows and grid[gr + 1][gc] == 0:
+				gr += 1
+			# Нужны: воздух под стопами, пол под ним.
+			if gr + 1 >= grid_rows or grid[gr + 1][gc] != 1 or grid[gr][gc] != 0:
+				continue
+			# Достаточно воздуха над головой (не замуровано).
+			var clear := true
+			for h in range(1, headroom + 1):
+				if gr - h < 0 or grid[gr - h][gc] == 1:
+					clear = false
+					break
+			if not clear:
+				continue
+			return Vector2(gc * tile_size + tile_size * 0.5, (gr + 1) * tile_size - 1)
+	return Vector2(INF, INF)
+
 func _get_spawn_position() -> Vector2:
 	# Pick a random non-start cave, verify position is reachable
 	var spawn_caves = caves.filter(func(c): return c.type != "start" and c.type != "chest")
@@ -2374,9 +2416,13 @@ func _get_spawn_position() -> Vector2:
 
 	for attempt in 30:
 		var cave = spawn_caves[randi() % spawn_caves.size()]
-		var px = cave.x + randf_range(-20, 20)
-		# Привязываем к реальному полу в этой колонке (не висеть в воздухе)
-		var py = _floor_y_in_column(px, cave.floor_y) - 1
+		var px0 = cave.x + randf_range(-20, 20)
+		# Ищем РОВНОЕ место на полу со свободным пространством (не в стене).
+		var fpos = _find_clear_floor(px0, cave.floor_y, 2)
+		if fpos.x == INF:
+			continue
+		var px = fpos.x
+		var py = fpos.y
 
 		# Check that the grid cell is reachable from start
 		if reachable_set.size() > 0:
@@ -2417,22 +2463,46 @@ func _spawn_door():
 				door.door_label = "[E] Place Crystal (need ore)"
 
 	var door_cave = null
+	var start_cave = null
 	for cave in caves:
-		if cave.type == "door":
+		if cave.type == "door" and door_cave == null:
 			door_cave = cave
-			break
+		if cave.type == "start" and start_cave == null:
+			start_cave = cave
+
+	# Дверь не должна появляться прямо на старте: если назначенная дверь-пещера
+	# слишком близко к старту (или её нет) — берём пещеру, наиболее ДАЛЁКУЮ от
+	# точки старта.
+	var min_door_dist: float = 8.0 * tile_size
+	var start_pos: Vector2 = Vector2(start_cave.x, start_cave.floor_y) if start_cave else Vector2.ZERO
+	if door_cave == null or (start_cave and Vector2(door_cave.x, door_cave.floor_y).distance_to(start_pos) < min_door_dist):
+		var best = null
+		var best_d := -1.0
+		for cave in caves:
+			if cave.type == "start" or cave.type == "chest":
+				continue
+			var d := Vector2(cave.x, cave.floor_y).distance_to(start_pos)
+			if d > best_d:
+				best_d = d
+				best = cave
+		if best != null:
+			door_cave = best
 
 	if door_cave:
-		# Привязываем дверь к реальному полу — чтобы не висела в воздухе/в блоке
-		var fy = _floor_y_in_column(door_cave.x, door_cave.floor_y)
-		door.position = Vector2(door_cave.x, fy - 14)
+		# Привязываем дверь к РОВНОМУ полу со свободным местом (не в стене).
+		var fpos = _find_clear_floor(door_cave.x, door_cave.floor_y, 2)
+		if fpos.x == INF:
+			fpos = Vector2(door_cave.x, _floor_y_in_column(door_cave.x, door_cave.floor_y) - 1)
+		door.position = Vector2(fpos.x, fpos.y - 13)
 	else:
-		var best = caves[0]
+		var best2 = caves[0]
 		for cave in caves:
-			if cave.x > best.x:
-				best = cave
-		var fy2 = _floor_y_in_column(best.x, best.floor_y)
-		door.position = Vector2(best.x, fy2 - 14)
+			if cave.x > best2.x:
+				best2 = cave
+		var fpos2 = _find_clear_floor(best2.x, best2.floor_y, 2)
+		if fpos2.x == INF:
+			fpos2 = Vector2(best2.x, _floor_y_in_column(best2.x, best2.floor_y) - 1)
+		door.position = Vector2(fpos2.x, fpos2.y - 13)
 
 	add_child(door)
 	doors.append(door)
@@ -2878,8 +2948,11 @@ func _spawn_single_enemy(x: float, y: float):
 	var dmg = 10 + room_level * 2
 	enemy.setup(eclass, hp, spd, dmg)
 	enemy.player = player_ref
-	# Привязываем к реальному полу — арена-враг не должен висеть в воздухе
-	enemy.position = Vector2(x, _floor_y_in_column(x, y) - 1)
+	# Привязываем к РОВНОМУ полу со свободным местом (не в стене/потолке).
+	var epos = _find_clear_floor(x, y, 2)
+	if epos.x == INF:
+		epos = Vector2(x, _floor_y_in_column(x, y) - 1)
+	enemy.position = epos
 	add_child(enemy)
 	enemies.append(enemy)
 	enemy.died.connect(_on_enemy_died)
@@ -4575,23 +4648,40 @@ func _draw_traps():
 		var pool_y = pp.pool_y
 		var pool_w = pp.pool_w
 		var pool_h = pp.get("pool_h", 8.0)
-		# Dark base layer — full depth
-		draw_rect(Rect2(pool_x, pool_y - pool_h, pool_w, pool_h + 2), Color(0.05, 0.3, 0.02, 0.55))
-		# Main pool body — slightly inset
-		draw_rect(Rect2(pool_x + 2, pool_y - pool_h + 1, pool_w - 4, pool_h - 1), Color(0.12, 0.55, 0.04, 0.7))
-		# Bright green surface
-		draw_rect(Rect2(pool_x + 3, pool_y - pool_h + 1, pool_w - 6, 3), Color(0.25, 0.8, 0.08, 0.5))
-		# Surface ripple
-		var ripple_t = fmod(Time.get_ticks_msec() * 0.001, 1.0)
-		var ripple_x = pool_x + pool_w * ripple_t
-		draw_line(Vector2(ripple_x - 3, pool_y - pool_h + 2), Vector2(ripple_x + 3, pool_y - pool_h + 2), Color(0.4, 0.95, 0.15, 0.4), 1.0)
-		# Bubbles
+		# Кислота рисуется как РАЗЛИТАЯ ЛУЖА (органическая форма на полу),
+		# а не как прямоугольная полоса. Верхняя кромка волнистая и сходит на
+		# нет к краям — будто кислота растеклась по поверхности.
+		var seg := 16
+		var tnow := Time.get_ticks_msec() * 0.0012
+		var top_pts := PackedVector2Array()
+		for i in range(seg + 1):
+			var t := float(i) / seg
+			var bump := sin(t * PI)                       # 0 по краям, 1 в центре
+			var hh := pool_h * (0.10 + 0.90 * bump)       # тонко на краях (разлив)
+			hh += sin(t * 9.0 + tnow * 3.0) * 1.3 * bump  # лёгкая рябь поверхности
+			top_pts.append(Vector2(pool_x + pool_w * t, pool_y - hh))
+		# Тело лужи: верхняя волнистая кромка + плоское дно по полу
+		var body := PackedVector2Array(top_pts)
+		body.append(Vector2(pool_x + pool_w, pool_y + 1))
+		body.append(Vector2(pool_x, pool_y + 1))
+		draw_colored_polygon(body, Color(0.06, 0.32, 0.03, 0.6))     # тёмная основа
+		# Светлая поверхностная плёнка вдоль кромки
+		var film := PackedVector2Array(top_pts)
+		for i in range(seg, -1, -1):
+			film.append(top_pts[i] + Vector2(0, 3.0))
+		draw_colored_polygon(film, Color(0.24, 0.78, 0.08, 0.6))
+		# Яркий блик-гребень на самой поверхности
+		for i in range(seg):
+			draw_line(top_pts[i], top_pts[i + 1], Color(0.45, 0.95, 0.18, 0.45), 1.0)
+		# Пузыри поднимаются из центра лужи
 		for bi in 5:
-			var bx = pool_x + pool_w * (0.1 + 0.18 * bi)
-			var by = pool_y - pool_h + 3
+			var t2 := 0.15 + 0.17 * bi
+			var bx = pool_x + pool_w * t2
+			var by = pool_y - 1
 			var bubble_t = fmod(Time.get_ticks_msec() * 0.002 + bi * 0.7, 2.0)
 			if bubble_t < 1.0:
-				draw_circle(Vector2(bx, by - bubble_t * (pool_h - 4)), 1.5 - bubble_t * 0.5, Color(0.3, 0.9, 0.1, 0.5 - bubble_t * 0.3))
+				var rise := bubble_t * pool_h * sin(t2 * PI)
+				draw_circle(Vector2(bx, by - rise), 1.6 - bubble_t * 0.6, Color(0.3, 0.9, 0.1, 0.5 - bubble_t * 0.3))
 
 	# Pressure plates
 	for plate in pressure_plates:
