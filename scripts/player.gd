@@ -844,6 +844,13 @@ func _physics_process(delta):
 		move_and_slide()
 		return
 
+	# Автоатака при ЗАЖАТОЙ ЛКМ — бьём с максимальной скоростью оружия,
+	# кликать повторно не нужно. (Кулдаун оружия сам ограничивает темп.)
+	if not is_dead and can_attack and not is_rolling and not is_grabbing_ledge \
+		and staff_spin_timer <= 0 and not is_webbed \
+		and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_do_attack()
+
 	# === CS-trackers ===
 	# Idle-таймер для инспекта: растёт когда стоим и ничего не нажимаем
 	var any_movement_input = Input.is_action_pressed("move_left") or Input.is_action_pressed("move_right") \

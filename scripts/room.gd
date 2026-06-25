@@ -4011,8 +4011,8 @@ func _get_visible_tile_range() -> Array:
 		center = player_ref.global_position
 	else:
 		return [0, grid_cols, 0, grid_rows]
-	var halfx := 220.0 + RECULL_DIST + 32.0
-	var halfy := 140.0 + RECULL_DIST + 32.0
+	var halfx := 220.0 + RECULL_DIST + 140.0
+	var halfy := 140.0 + RECULL_DIST + 140.0
 	var c0 := clampi(int((center.x - halfx) / tile_size), 0, grid_cols)
 	var c1 := clampi(int((center.x + halfx) / tile_size) + 1, 0, grid_cols)
 	var r0 := clampi(int((center.y - halfy) / tile_size), 0, grid_rows)

@@ -52,10 +52,10 @@ func _compute_visible_range() -> Rect2i:
 		center = p.global_position
 	else:
 		center = Vector2(room.room_width, room.room_height) * 0.5
-	# Видимая полузона ~220x132px + запас на RECULL_DIST, чтобы при ходьбе
-	# не выезжали края до следующего перестроения.
-	var halfx := 220.0 + RECULL_DIST + 32.0
-	var halfy := 140.0 + RECULL_DIST + 32.0
+	# Видимая полузона ~220x132px + большой запас, чтобы край отрисованной
+	# области никогда не попадал на экран (раньше был виден «обрыв» стен).
+	var halfx := 220.0 + RECULL_DIST + 140.0
+	var halfy := 140.0 + RECULL_DIST + 140.0
 	var x0 := clampi(int((center.x - halfx) / ts), 0, room.grid_cols)
 	var x1 := clampi(int((center.x + halfx) / ts) + 1, 0, room.grid_cols)
 	var y0 := clampi(int((center.y - halfy) / ts), 0, room.grid_rows)
