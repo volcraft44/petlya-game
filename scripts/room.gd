@@ -2370,6 +2370,22 @@ func _floor_y_in_column(px: float, py_hint: float) -> float:
 	# Пол не найден (сквозная шахта) — ставим на нижний ряд
 	return float(grid_rows - 1) * tile_size
 
+func get_player_spawn() -> Vector2:
+	# Гарантированно безопасная точка появления игрока: РОВНЫЙ пол со
+	# свободным местом в стартовой пещере. Если по какой-то причине пол в
+	# колонке отсутствует — берём реальный пол через _floor_y_in_column.
+	var sc = null
+	for cave in caves:
+		if cave.type == "start":
+			sc = cave
+			break
+	var hint_x: float = sc.x if sc else float(int(grid_cols / 2) * tile_size)
+	var hint_y: float = sc.floor_y if sc else floor_y
+	var fpos := _find_clear_floor(hint_x, hint_y, 2)
+	if fpos.x != INF:
+		return Vector2(fpos.x, fpos.y - 10)
+	return Vector2(hint_x, _floor_y_in_column(hint_x, hint_y) - 10)
+
 func _find_clear_floor(px: float, py_hint: float, headroom: int = 2) -> Vector2:
 	# Ищет место НА ПОЛУ со свободным пространством над головой, чтобы дверь/
 	# монстр не оказались замурованы в стене. Перебирает колонку px и соседние
@@ -2383,7 +2399,7 @@ func _find_clear_floor(px: float, py_hint: float, headroom: int = 2) -> Vector2:
 		for sgn in [0, 1, -1]:
 			if off == 0 and sgn != 0:
 				continue
-			var gc := gc0 + sgn * off
+			var gc: int = gc0 + sgn * off
 			if gc < 1 or gc >= grid_cols - 1:
 				continue
 			# Из подсказки выходим вверх из стены, затем спускаемся до пола.
@@ -4644,10 +4660,10 @@ func _draw_traps():
 				var t = fmod(Time.get_ticks_msec() * 0.003, 1.0)
 				draw_circle(Vector2(drip_x, py + 3 + t * 10), 1.5, Color(0.2, 0.85, 0.1, 1.0 - t))
 		# Poison pool — big puddle
-		var pool_x = pp.pool_x
-		var pool_y = pp.pool_y
-		var pool_w = pp.pool_w
-		var pool_h = pp.get("pool_h", 8.0)
+		var pool_x: float = pp.pool_x
+		var pool_y: float = pp.pool_y
+		var pool_w: float = pp.pool_w
+		var pool_h: float = pp.get("pool_h", 8.0)
 		# Кислота рисуется как РАЗЛИТАЯ ЛУЖА (органическая форма на полу),
 		# а не как прямоугольная полоса. Верхняя кромка волнистая и сходит на
 		# нет к краям — будто кислота растеклась по поверхности.
@@ -4675,12 +4691,12 @@ func _draw_traps():
 			draw_line(top_pts[i], top_pts[i + 1], Color(0.45, 0.95, 0.18, 0.45), 1.0)
 		# Пузыри поднимаются из центра лужи
 		for bi in 5:
-			var t2 := 0.15 + 0.17 * bi
-			var bx = pool_x + pool_w * t2
-			var by = pool_y - 1
-			var bubble_t = fmod(Time.get_ticks_msec() * 0.002 + bi * 0.7, 2.0)
+			var t2: float = 0.15 + 0.17 * bi
+			var bx: float = pool_x + pool_w * t2
+			var by: float = pool_y - 1.0
+			var bubble_t: float = fmod(Time.get_ticks_msec() * 0.002 + bi * 0.7, 2.0)
 			if bubble_t < 1.0:
-				var rise := bubble_t * pool_h * sin(t2 * PI)
+				var rise: float = bubble_t * pool_h * sin(t2 * PI)
 				draw_circle(Vector2(bx, by - rise), 1.6 - bubble_t * 0.6, Color(0.3, 0.9, 0.1, 0.5 - bubble_t * 0.3))
 
 	# Pressure plates

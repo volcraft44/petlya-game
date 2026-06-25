@@ -710,11 +710,12 @@ func _load_room():
 			start_cave = cave
 			break
 	if start_cave:
-		player.position = Vector2(start_cave.x, start_cave.floor_y - 10)
+		# Снапим к гарантированно твёрдому полу, чтобы не провалиться в пустоту.
+		player.position = current_room.get_player_spawn()
 		print("START: player at ", player.position, " floor_y=", start_cave.floor_y)
 	else:
-		player.position = Vector2(100, current_room.floor_y - 10)
-		print("NO START CAVE! floor_y=", current_room.floor_y, " caves=", current_room.caves.size())
+		player.position = current_room.get_player_spawn()
+		print("NO START CAVE! using safe spawn ", player.position)
 	player.velocity = Vector2.ZERO
 	# Snap camera to player immediately (no smoothing delay)
 	camera.global_position = player.position
@@ -1376,18 +1377,10 @@ func _process(delta):
 	if player and is_instance_valid(player):
 		hud.update_progression(player.char_level, player.xp, player.xp_needed)
 
-	# Safety: if player falls below map, teleport back to start
+	# Safety: if player falls below map, teleport back to a safe solid floor
 	if player and is_instance_valid(player) and not player.is_dead:
 		if player.position.y > current_room.room_height + 100:
-			var start_cave = null
-			for cave in current_room.caves:
-				if cave.type == "start":
-					start_cave = cave
-					break
-			if start_cave:
-				player.position = Vector2(start_cave.x, start_cave.floor_y - 10)
-			else:
-				player.position = Vector2(60, current_room.floor_y - 10)
+			player.position = current_room.get_player_spawn()
 			player.velocity = Vector2.ZERO
 
 func _pause_nav(dir: int):
