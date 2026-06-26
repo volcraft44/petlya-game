@@ -121,6 +121,10 @@ var trial_heart_area: Area2D = null
 
 # Traps
 var spikes: Array = []         # {x, y, w} — spike strips on floor
+# Блоки шипов — тайловые ловушки/препятствия. Бьют при касании, можно ставить
+# на пол/потолок/стены/в воздух. dir = направление остриёв ("up/down/left/right").
+var spike_blocks: Array = []   # [{c, r, dir}]
+var _spike_hit_cd: float = 0.0
 
 # --- Платформер-генератор: общее состояние для сегментов-строителей ---
 var _pf_rng: RandomNumberGenerator = null
@@ -278,7 +282,8 @@ func setup(level: int, enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 	_enemy_scene_ref = enemy_scene
 	_set_biome(level)
 	_determine_challenge_type()
-	_generate_platformer()
+	_generate_cave()
+	_postprocess_platformer()   # доб. парящие платформы + шипы-препятствия
 	_build_collision()
 	_place_torches()
 	_calculate_dark_zones()
@@ -1294,6 +1299,95 @@ func _seg_spike_pit(c: int, r: int) -> Array:
 	c = c + pit_w + 1
 	_pf_plat(c, c + 4, r)
 	return [c + 5, r]
+
+func _add_spike_block(c: int, r: int, dir: String) -> void:
+	if c < 1 or c >= grid_cols - 1 or r < 1 or r >= grid_rows - 1:
+		return
+	# Не дублируем блок в той же клетке.
+	for sb in spike_blocks:
+		if sb.c == c and sb.r == r:
+			return
+	spike_blocks.append({"c": c, "r": r, "dir": dir})
+
+func _postprocess_platformer():
+	# Превращаем пещеру в платформенный вызов: парящие платформы для запрыгивания
+	# в высоких залах (чтобы карта не пустовала) + БЛОКИ ШИПОВ как ловушки и
+	# препятствия на полу/потолке/стенах. Шипы — тайловые, бьют при касании,
+	# их нужно обходить/перепрыгивать → больше манёвра и неудобства для игрока.
+	spike_blocks.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+
+	var sx_tile := -999
+	for cave in caves:
+		if cave.type == "start":
+			sx_tile = int(cave.x / tile_size)
+			break
+
+	# 1) Парящие платформы в высоких воздушных проёмах.
+	var plats_added := 0
+	var c := 5
+	while c < grid_cols - 5 and plats_added < 70:
+		c += rng.randi_range(4, 7)
+		var r := 4
+		while r < grid_rows - 3:
+			if grid[r][c] == 0:
+				var top := r
+				while r < grid_rows - 1 and grid[r][c] == 0:
+					r += 1
+				var bot := r                # первый твёрдый снизу
+				var h := bot - top
+				if h >= 6 and absi(c - sx_tile) > 5:
+					var pr := bot - rng.randi_range(3, 4)   # достижимо над дном
+					var pw := rng.randi_range(3, 5)
+					var ok := true
+					for cc in range(c, c + pw):
+						if cc >= grid_cols - 1 or grid[pr][cc] != 0 \
+							or grid[pr - 1][cc] != 0 or grid[pr + 1][cc] != 0:
+							ok = false
+							break
+					if ok:
+						for cc in range(c, c + pw):
+							grid[pr][cc] = 1
+						plats_added += 1
+						# Иногда — блок шипов на этой платформе (перепрыгнуть).
+						if rng.randf() < 0.30 and pw >= 4:
+							_add_spike_block(c + int(pw / 2), pr - 1, "up")
+			else:
+				r += 1
+
+	# 2) Блоки шипов как ловушки — на полах, потолках и стенах.
+	var sb_added := 0
+	var c2 := 6
+	while c2 < grid_cols - 6 and sb_added < 55:
+		c2 += rng.randi_range(3, 7)
+		if absi(c2 - sx_tile) <= 5:
+			continue
+		var kind := rng.randi() % 3
+		for rr in range(5, grid_rows - 3):
+			if kind == 0:
+				# Пол: острия вверх (блок в воздухе над твёрдым полом).
+				if grid[rr][c2] == 1 and grid[rr - 1][c2] == 0 and grid[rr - 2][c2] == 0:
+					_add_spike_block(c2, rr - 1, "up")
+					sb_added += 1
+					break
+			elif kind == 1:
+				# Потолок: острия вниз (блок в воздухе под твёрдым потолком).
+				if grid[rr][c2] == 1 and grid[rr + 1][c2] == 0 and grid[rr + 2][c2] == 0:
+					_add_spike_block(c2, rr + 1, "down")
+					sb_added += 1
+					break
+			else:
+				# Стена: острия в проход вбок.
+				if grid[rr][c2] == 0:
+					if c2 > 1 and grid[rr][c2 - 1] == 1 and grid[rr][c2 + 1] == 0:
+						_add_spike_block(c2, rr, "right")
+						sb_added += 1
+						break
+					elif c2 < grid_cols - 2 and grid[rr][c2 + 1] == 1 and grid[rr][c2 - 1] == 0:
+						_add_spike_block(c2, rr, "left")
+						sb_added += 1
+						break
 
 func _generate_cave():
 	grid.clear()
@@ -2881,6 +2975,8 @@ func _process(delta):
 	# один раз, Godot кэширует draw-команды. Это убирает спайки кадра.
 
 	# Trap checks
+	if _spike_hit_cd > 0.0:
+		_spike_hit_cd -= delta
 	if player_ref and is_instance_valid(player_ref) and not player_ref.is_dead:
 		var px = player_ref.global_position.x
 		var py = player_ref.global_position.y
@@ -2890,6 +2986,22 @@ func _process(delta):
 				var spike_center_x = sp.x + sp.w * 0.5
 				var kb_dir_x = 1.0 if px > spike_center_x else -1.0
 				player_ref.take_damage(10, Vector2(kb_dir_x * 0.5, -1.0).normalized())
+		# Блоки шипов — бьют при касании с ЛЮБОЙ стороны (ловушки/препятствия).
+		# Хитбокс игрока ~7x16 с центром (px, py-8): проверяем пересечение с тайлом.
+		if _spike_hit_cd <= 0.0:
+			for sb in spike_blocks:
+				var bx: float = sb.c * tile_size
+				var by: float = sb.r * tile_size
+				if px + 4.0 > bx and px - 4.0 < bx + tile_size \
+					and py > by - 1.0 and py - 16.0 < by + tile_size:
+					var bcx: float = bx + tile_size * 0.5
+					var bcy: float = by + tile_size * 0.5
+					var kdir := Vector2(px - bcx, (py - 8.0) - bcy)
+					if kdir.length() < 0.5:
+						kdir = Vector2(0, -1)
+					player_ref.take_damage(12, kdir.normalized())
+					_spike_hit_cd = 0.6   # анти-спам урона
+					break
 		# Poison pools — DOT or heal (acid_water card)
 		for pp in poison_pipes:
 			var ph = pp.get("pool_h", 8.0)
@@ -4896,6 +5008,42 @@ func _draw_traps():
 			# Blood stain occasionally
 			if fmod(float(i) * 3.7, 5.0) < 1.0:
 				draw_circle(Vector2(sx, y - 4), 1.0, Color(0.6, 0.1, 0.1, 0.4))
+
+	# Блоки шипов — тайловые ловушки. Острия смотрят по dir.
+	for sb in spike_blocks:
+		var bx: float = sb.c * tile_size
+		if bx + tile_size < vx0 or bx > vx1:
+			continue
+		var by: float = sb.r * tile_size
+		var ts: float = float(tile_size)
+		var dir: String = sb.get("dir", "up")
+		# Тёмное основание-блок
+		draw_rect(Rect2(bx, by, ts, ts), Color(0.16, 0.16, 0.2, 0.85))
+		var teeth := 4
+		var metal := Color(0.55, 0.56, 0.62, 0.95)
+		var tip := Color(0.82, 0.84, 0.9, 0.9)
+		for i in teeth:
+			var f0 := bx + ts * (float(i) + 0.1) / teeth
+			var f1 := bx + ts * (float(i) + 0.9) / teeth
+			var fmid := (f0 + f1) * 0.5
+			var g0 := by + ts * (float(i) + 0.1) / teeth
+			var g1 := by + ts * (float(i) + 0.9) / teeth
+			var gmid := (g0 + g1) * 0.5
+			match dir:
+				"down":
+					draw_colored_polygon(PackedVector2Array([
+						Vector2(f0, by), Vector2(f1, by), Vector2(fmid, by + ts)]), metal)
+					draw_line(Vector2(fmid, by + ts), Vector2(fmid, by + ts * 0.5), tip, 0.7)
+				"left":
+					draw_colored_polygon(PackedVector2Array([
+						Vector2(bx + ts, g0), Vector2(bx + ts, g1), Vector2(bx, gmid)]), metal)
+				"right":
+					draw_colored_polygon(PackedVector2Array([
+						Vector2(bx, g0), Vector2(bx, g1), Vector2(bx + ts, gmid)]), metal)
+				_:  # up
+					draw_colored_polygon(PackedVector2Array([
+						Vector2(f0, by + ts), Vector2(f1, by + ts), Vector2(fmid, by)]), metal)
+					draw_line(Vector2(fmid, by), Vector2(fmid, by + ts * 0.5), tip, 0.7)
 
 	# Poison pools (with optional pipes)
 	for pp in poison_pipes:
