@@ -37,6 +37,9 @@ var patrol_timer: float = 0.0
 var is_attacking_melee: bool = false
 var melee_anim_timer: float = 0.0
 var is_blocking: bool = false
+# Контактный отпор: толкаем игрока, если он влез в хитбокс врага.
+var contact_cd: float = 0.0
+var contact_radius: float = 14.0
 
 # Spear variant (longer range shieldman)
 var is_spear: bool = false
@@ -608,6 +611,29 @@ func _physics_process(delta):
 		if global_position.distance_squared_to(player.global_position) > 900.0 * 900.0:
 			move_and_slide()
 			return
+
+	# === КОНТАКТНЫЙ ОТПОР ===
+	# Нельзя стоять «внутри» врага и безнаказанно лупить — если игрок прижался
+	# к хитбоксу, его выталкивает наружу и по кулдауну наносит лёгкий урон.
+	# Летающие враги (муха/комар) бьют иначе — их не касается.
+	if contact_cd > 0.0:
+		contact_cd -= delta
+	if player and is_instance_valid(player) and not is_dying \
+		and enemy_class != EnemyClass.FLY and enemy_class != EnemyClass.MOSQUITO \
+		and not ("is_dead" in player and player.is_dead) \
+		and not ("dash_active" in player and player.dash_active):
+		var cr := contact_radius + (12.0 if is_miniboss else 0.0)
+		var pd := global_position.distance_to(player.global_position)
+		if pd < cr:
+			var push := player.global_position - global_position
+			if push.length() < 0.5:
+				push = Vector2((1.0 if randf() < 0.5 else -1.0), -0.3)
+			push = push.normalized()
+			if player.has_method("apply_contact_push"):
+				player.apply_contact_push(push)
+			if contact_cd <= 0.0:
+				contact_cd = 0.7
+				player.take_damage(maxi(1, int(damage * 0.5)), push)
 
 	# === ELITE поведение ===
 	if elite_affix != "":

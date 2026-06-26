@@ -43,6 +43,11 @@ var coyote_timer: float = 0.0
 var coyote_time: float = 0.10
 var was_on_floor: bool = false
 
+# Переменная высота прыжка (Hollow Knight): держишь пробел — высокий прыжок,
+# отпустил рано на взлёте — подъём обрезается → низкий прыжок.
+var is_jump_rising: bool = false
+const JUMP_CUT_VELOCITY := -120.0
+
 # Hit-stop — freeze for a few frames when landing a hit
 var hit_stop_timer: float = 0.0
 
@@ -479,8 +484,9 @@ const BHOP_MIN_INTERVAL: float = 0.30    # минимум сек между бho
 # === DASH (ULTRAKILL-style charges) ===
 const DASH_MAX_CHARGES: int = 3
 const DASH_RECHARGE_TIME: float = 1.5
-const DASH_DURATION: float = 0.18
-const DASH_SPEED: float = 360.0
+# Дэш уменьшен — короткий рывок для платформинга, а не длинный полёт.
+const DASH_DURATION: float = 0.12
+const DASH_SPEED: float = 270.0
 var dash_charges: float = 3.0       # дробное, чтобы плавно копилось
 var dash_active: bool = false
 var dash_timer: float = 0.0
@@ -524,11 +530,14 @@ func _ready():
 	health = max_health
 	normal_collision_mask = 4 | 8 | 32  # walls + doors + one-way platforms
 
+	# Прощающий хитбокс: ~70% от спрайта (спрайт ~10x22). Уже и ниже самого
+	# персонажа, ступни остаются на уровне пола — в спорных касаниях игра за
+	# игрока (меньше незаслуженных задеваний, легче пролезать в щели).
 	body_collision = CollisionShape2D.new()
 	var rect = RectangleShape2D.new()
-	rect.size = Vector2(10, 22)
+	rect.size = Vector2(7, 16)            # 70% ширины, ~73% высоты спрайта
 	body_collision.shape = rect
-	body_collision.position = Vector2(0, -11)
+	body_collision.position = Vector2(0, -8)   # низ хитбокса = ступни (y=0)
 	add_child(body_collision)
 
 	attack_area = Area2D.new()
@@ -891,9 +900,10 @@ func _physics_process(delta):
 	else:
 		inspect_idle_timer += delta
 
-	# === BHOP трекинг ===
-	# Перезарядка dash-чарджей
-	if dash_charges < float(DASH_MAX_CHARGES) and not dash_active:
+	# Перезарядка dash-чарджей — ТОЛЬКО когда персонаж стоит на полу (не в
+	# воздухе, не на лестнице/уступе). Так дэш — наземный инструмент.
+	if dash_charges < float(DASH_MAX_CHARGES) and not dash_active \
+		and is_on_floor() and not is_on_vine and not is_grabbing_ledge:
 		dash_charges = min(float(DASH_MAX_CHARGES), dash_charges + delta / DASH_RECHARGE_TIME)
 
 	# Anti-spam: если Space НЕ нажат — значит игрок его отпустил, готов к новому прыжку
@@ -1242,6 +1252,16 @@ func _physics_process(delta):
 				if is_on_floor() and not Input.is_action_pressed("move_down"):
 					is_on_vine = false
 
+	# Переменная высота прыжка: отпустил пробел пока ещё летим вверх — режем
+	# скорость подъёма (низкий прыжок). Держишь — взлетаем на полную высоту.
+	if is_jump_rising:
+		if velocity.y >= 0.0:
+			is_jump_rising = false
+		elif not Input.is_action_pressed("jump") and not Input.is_action_pressed("move_up"):
+			if velocity.y < JUMP_CUT_VELOCITY:
+				velocity.y = JUMP_CUT_VELOCITY
+			is_jump_rising = false
+
 	if not is_on_vine:
 		# Fast-fall: apply extra gravity when falling (not jumping up) — Dead Cells feel
 		if velocity.y > 0:
@@ -1317,9 +1337,7 @@ func _physics_process(delta):
 		current_speed *= 1.8
 	if is_attacking:
 		current_speed *= 0.55
-	# BHOP множитель: каждый стэк = +15% скорости
-	if bhop_stacks > 0:
-		current_speed *= (1.0 + bhop_stacks * BHOP_STEP)
+	# Банихоп убран — никакого ускорения от стэков прыжков.
 
 	# Snappy acceleration: instant start, quick stop
 	var target_vx = dir * current_speed
@@ -1371,39 +1389,10 @@ func _physics_process(delta):
 			var jf = jump_force
 			if active_card == "speed_boots":
 				jf *= 1.3
-			# LONG JUMP: зажат Shift → низкий прыжок, мощный горизонтальный буст
-			var long_jump = Input.is_key_pressed(KEY_SHIFT)
-			if long_jump:
-				jf *= 0.50  # вдвое ниже подскок
-				var lj_dir = 0.0
-				if Input.is_action_pressed("move_left"): lj_dir -= 1.0
-				if Input.is_action_pressed("move_right"): lj_dir += 1.0
-				if lj_dir == 0.0:
-					lj_dir = 1.0 if facing_right else -1.0
-				# Горизонтальный буст
-				velocity.x = lj_dir * 240.0
-			# === BHOP detection (ULTRAKILL-style: Shift + Space) ===
-			# Чтобы получить bhop-стэк нужно ДЕРЖАТЬ Shift и прыгнуть в окне.
-			# Это 2-кнопочная механика — спамить пробел бесполезно.
-			var moving = Input.is_action_pressed("move_left") or Input.is_action_pressed("move_right")
-			var enough_interval = bhop_time_since_jump >= BHOP_MIN_INTERVAL
-			var shift_held = long_jump  # Shift зажат (определено выше как long_jump)
-			if bhop_window_t > 0.0 and moving and enough_interval and bhop_pressed_grounded and shift_held:
-				_add_bhop_stack("PERFECT BHOP")
-			else:
-				if bhop_stacks > 0:
-					# Сбрасываем только если приземлились и не сделали bhop (промах ритма)
-					var reason = "missed"
-					if not enough_interval:
-						reason = "TOO FAST"
-					_reset_bhop_combo(reason)
-			bhop_pressed_grounded = false
 			velocity.y = jf
+			is_jump_rising = true   # включаем переменную высоту прыжка
 			coyote_timer = 0.0
 			jump_buffer_timer = 0.0
-			bhop_window_t = 0.0   # окно использовано
-			bhop_space_released = false  # нужно отпустить Space до следующего прыжка
-			bhop_time_since_jump = 0.0   # сброс анти-спам таймера
 			jumped.emit()
 		elif is_wall_sliding:
 			# Wall jump - jump away from wall
@@ -3434,12 +3423,21 @@ func _draw_pickaxe(s: int):
 # CS FEATURES: Inspect / Smoke / Flash
 # ───────────────────────────────────────────────────────────────────
 
-func _add_bhop_stack(label: String) -> void:
-	bhop_stacks = min(bhop_stacks + 1, BHOP_MAX_STACKS)
-	bhop_perfect_flash_t = 0.45
-	bhop_perfect.emit(bhop_stacks, global_position)
-	# Лёгкий screen shake растёт со стэками
-	screen_shake.emit(0.8 + bhop_stacks * 0.2, 0.08)
+func apply_contact_push(dir: Vector2) -> void:
+	# Лёгкий отпор от тела врага: выталкиваем игрока наружу, чтобы он не мог
+	# стоять внутри хитбокса. Толчок мягкий — намерение игрока двигаться важнее,
+	# но «влипнуть» во врага уже нельзя.
+	if is_dead or is_rolling or dash_active:
+		return
+	global_position += dir * 0.9
+	velocity.x += dir.x * 70.0
+	if dir.y < 0.0:
+		velocity.y = minf(velocity.y, dir.y * 50.0)
+
+func _add_bhop_stack(_label: String) -> void:
+	# Банихоп убран по просьбе игрока — функция оставлена пустой, чтобы старые
+	# вызовы (выход из дэша и т.п.) ничего не делали.
+	pass
 
 func _reset_bhop_combo(_reason: String) -> void:
 	if bhop_stacks > 0:
