@@ -121,6 +121,12 @@ var trial_heart_area: Area2D = null
 
 # Traps
 var spikes: Array = []         # {x, y, w} — spike strips on floor
+
+# --- Платформер-генератор: общее состояние для сегментов-строителей ---
+var _pf_rng: RandomNumberGenerator = null
+var _pf_lower_r: int = 0
+var _pf_diff: int = 1
+var _pf_tops: Array = []        # [{c0, c1, r}] площадки для лестниц/спавна
 var poison_pipes: Array = []   # {x, y, dir, pool_w} — pipes with poison pools
 var pressure_plates: Array = [] # {x, y, triggered, cooldown} — arrow traps
 var trial_active: bool = false
@@ -1046,14 +1052,15 @@ func _set_biome(level: int):
 
 func _generate_platformer():
 	# === ПЛАТФОРМЕННЫЙ УРОВЕНЬ «ПО ПРАВИЛАМ» ===
-	# Не бездумные блоки, а спроектированный путь: цепочка площадок с
-	# прыжковыми разрывами и перепадами высот СТРОГО в пределах прыжка игрока
-	# (jump=-360, g=980 → ~4 тайла вверх / ~5 в длину). Снизу — общий
-	# страховочный пол + лестницы к каждой площадке: упал — не умер, поднялся
-	# и продолжил. Софтлока быть не может (дверь достижима и по платформам,
-	# и по нижнему полу через крайнюю лестницу) — «в спорных ситуациях за игрока».
-	room_width = 2600.0
-	room_height = 600.0
+	# Уровень собирается из РАЗНЫХ сегментов-испытаний (лестницы, прыжковые
+	# разрывы, шипастые платформы, узкие ступени, шипастые ямы со ступенями,
+	# высокие уступы) — это даёт вертикаль и осмысленную сложность из самой
+	# геометрии, а не «10 одинаковых платформ». Все прыжки СТРОГО в пределах
+	# возможностей игрока. Шипы — настоящие препятствия НА маршруте (их нужно
+	# перепрыгивать/облетать). Снизу — чистый страховочный пол + лестницы:
+	# упал — не умер, поднялся и продолжил. Софтлока нет, спорное — за игрока.
+	room_width = 3000.0
+	room_height = 880.0   # выше → есть куда лезть вверх
 	grid_cols = int(room_width / tile_size)
 	grid_rows = int(room_height / tile_size)
 	floor_y = room_height - tile_size * 2
@@ -1070,8 +1077,8 @@ func _generate_platformer():
 	poison_pipes.clear()
 	pressure_plates.clear()
 	minimap_rooms.clear()
+	_pf_tops = []
 
-	# Всё твёрдое, затем вырезаем игровой объём (рамка стен остаётся).
 	for r in grid_rows:
 		var erow := []
 		var row := []
@@ -1088,64 +1095,55 @@ func _generate_platformer():
 		for c in range(left_wall, right_wall + 1):
 			grid[r][c] = 0
 
-	# Нижний страховочный пол.
 	var lower_r := grid_rows - 3
 	for c in range(left_wall, right_wall + 1):
 		for r in range(lower_r, grid_rows):
 			grid[r][c] = 1
 
-	var rng := RandomNumberGenerator.new()
-	# Сложность растёт с уровнем (но всё ещё в пределах прыжка).
-	var diff: int = clampi(room_level, 1, 9)
+	_pf_rng = RandomNumberGenerator.new()
+	_pf_rng.randomize()
+	_pf_lower_r = lower_r
+	_pf_diff = clampi(room_level, 1, 9)
 
-	var path_r := lower_r - 5
+	# Стартовая площадка (широкая, безопасная) на средней высоте.
 	var c_cursor := left_wall + 2
-	var platform_tops: Array = []
-
-	# Стартовая площадка (широкая, безопасная).
-	var start_w := 7
-	for c in range(c_cursor, c_cursor + start_w):
-		grid[path_r][c] = 1
-	platform_tops.append({"c0": c_cursor, "c1": c_cursor + start_w - 1, "r": path_r})
+	var r_cursor := lower_r - 6
+	_pf_plat(c_cursor, c_cursor + 6, r_cursor)
 	caves.append({
 		"x": float((c_cursor + 2) * tile_size),
-		"y": float((path_r - 4) * tile_size),
-		"floor_y": float(path_r * tile_size),
+		"y": float((r_cursor - 4) * tile_size),
+		"floor_y": float(r_cursor * tile_size),
 		"type": "start",
 	})
-	c_cursor += start_w
+	c_cursor += 7
 
-	# Сегменты до правого края — каждый прыжок в безопасном «конверте».
-	while c_cursor < right_wall - 12:
-		# Сначала выбираем разрыв, потом ограничиваем перепад высоты под него,
-		# чтобы комбинация (вверх+вдаль) ВСЕГДА была допрыгиваемой.
-		var gap: int = rng.randi_range(2, 3 + (1 if diff >= 4 else 0))   # 2..4
-		c_cursor += gap
-		var max_up: int
-		if gap >= 4:
-			max_up = 1
-		elif gap == 3:
-			max_up = 2
-		else:
-			max_up = 3
-		var dr: int = rng.randi_range(-max_up, 2)   # вверх трудно, вниз легко
-		path_r = clampi(path_r + dr, top_wall + 3, lower_r - 2)
-		var pw: int = rng.randi_range(4, 7)
-		if c_cursor + pw > right_wall - 2:
-			pw = right_wall - 2 - c_cursor
-		if pw < 3:
-			break
-		for c in range(c_cursor, c_cursor + pw):
-			grid[path_r][c] = 1
-		platform_tops.append({"c0": c_cursor, "c1": c_cursor + pw - 1, "r": path_r})
-		c_cursor += pw
+	# Чередуем сегменты-испытания, не повторяя один и тот же подряд.
+	var seg_pool := ["gap", "stairs_up", "stairs_down", "spike_platform",
+		"narrow_hops", "spike_pit", "high_ledge"]
+	var last_seg := ""
+	var safety := 0
+	while c_cursor < right_wall - 14 and safety < 60:
+		safety += 1
+		var seg: String = seg_pool[_pf_rng.randi() % seg_pool.size()]
+		if seg == last_seg:
+			continue
+		last_seg = seg
+		var res: Array
+		match seg:
+			"gap":            res = _seg_gap(c_cursor, r_cursor)
+			"stairs_up":      res = _seg_stairs_up(c_cursor, r_cursor)
+			"stairs_down":    res = _seg_stairs_down(c_cursor, r_cursor)
+			"spike_platform": res = _seg_spike_platform(c_cursor, r_cursor)
+			"narrow_hops":    res = _seg_narrow_hops(c_cursor, r_cursor)
+			"spike_pit":      res = _seg_spike_pit(c_cursor, r_cursor)
+			_:                res = _seg_high_ledge(c_cursor, r_cursor)
+		c_cursor = res[0]
+		r_cursor = clampi(res[1], top_wall + 3, lower_r - 2)
 
 	# Финальная площадка справа + дверь.
-	var end_c0: int = right_wall - 8
-	var end_r: int = clampi(path_r, top_wall + 3, lower_r - 2)
-	for c in range(end_c0, right_wall + 1):
-		grid[end_r][c] = 1
-	platform_tops.append({"c0": end_c0, "c1": right_wall, "r": end_r})
+	var end_c0: int = clampi(right_wall - 8, left_wall + 2, right_wall - 2)
+	var end_r: int = clampi(r_cursor, top_wall + 3, lower_r - 2)
+	_pf_plat(end_c0, right_wall, end_r)
 	caves.append({
 		"x": float((right_wall - 3) * tile_size),
 		"y": float((end_r - 4) * tile_size),
@@ -1153,21 +1151,34 @@ func _generate_platformer():
 		"type": "door",
 	})
 
-	# Лестницы от каждой площадки вниз к страховочному полу.
-	for pt in platform_tops:
-		var lc: int = int((pt.c0 + pt.c1) / 2)
-		for r in range(pt.r + 1, lower_r):
-			grid[r][lc] = 0
-		ladders.append({
-			"x": float(lc * tile_size + tile_size / 2),
-			"y_top": float(pt.r * tile_size),
-			"y_bottom": float(lower_r * tile_size),
-			"col": lc,
-		})
+	# Лестницы для восстановления — под широкими «опорными» площадками и под
+	# началом/концом. Узкие ступени намеренно без лестниц (это и есть вызов).
+	var ladder_cd := 0
+	for i in _pf_tops.size():
+		var pt = _pf_tops[i]
+		ladder_cd -= 1
+		var wide: bool = (pt.c1 - pt.c0) >= 4
+		var is_end: bool = (i == 0 or i == _pf_tops.size() - 1)
+		if (wide and ladder_cd <= 0) or is_end:
+			ladder_cd = 2
+			var lc: int = int((pt.c0 + pt.c1) / 2)
+			if lc <= left_wall or lc >= right_wall:
+				continue
+			for r in range(pt.r + 1, lower_r):
+				grid[r][lc] = 0
+			ladders.append({
+				"x": float(lc * tile_size + tile_size / 2),
+				"y_top": float(pt.r * tile_size),
+				"y_bottom": float(lower_r * tile_size),
+				"col": lc,
+			})
 
-	# «Нормальные» пещеры для спавна врагов/лута — на площадках и нижнем полу.
-	for pt in platform_tops:
-		if pt.c1 - pt.c0 >= 4 and pt.r != platform_tops[0].r:
+	# Пещеры для спавна врагов/лута — на широких площадках и на нижнем полу.
+	for i in _pf_tops.size():
+		var pt = _pf_tops[i]
+		if i == 0:
+			continue
+		if (pt.c1 - pt.c0) >= 4:
 			caves.append({
 				"x": float(int((pt.c0 + pt.c1) / 2) * tile_size),
 				"y": float((pt.r - 3) * tile_size),
@@ -1182,6 +1193,107 @@ func _generate_platformer():
 	})
 
 	reachable_set = _get_reachable_tiles()
+
+# --- Помощники платформер-генератора ---
+func _pf_plat(c0: int, c1: int, r: int) -> void:
+	for c in range(c0, c1 + 1):
+		if c >= 1 and c < grid_cols - 1 and r >= 2 and r < grid_rows:
+			grid[r][c] = 1
+	_pf_tops.append({"c0": c0, "c1": c1, "r": r})
+
+func _pf_spike(c0: int, c1: int, r: int) -> void:
+	# Полоса шипов на верхней грани ряда r (под ними уже лежит твёрдый тайл).
+	if c1 < c0:
+		return
+	spikes.append({
+		"x": float(c0 * tile_size),
+		"y": float(r * tile_size),
+		"w": float((c1 - c0 + 1) * tile_size),
+	})
+
+# Каждый сегмент рисует геометрию вперёд от (c, r) и возвращает [новый c, новый r].
+func _seg_gap(c: int, r: int) -> Array:
+	var gap: int = _pf_rng.randi_range(2, 3 + (1 if _pf_diff >= 4 else 0))
+	c += gap
+	var max_up: int = 3 if gap <= 2 else (2 if gap == 3 else 1)
+	var dr: int = _pf_rng.randi_range(-max_up, 2)
+	r = clampi(r + dr, 4, _pf_lower_r - 2)
+	var pw: int = _pf_rng.randi_range(4, 7)
+	_pf_plat(c, c + pw - 1, r)
+	return [c + pw, r]
+
+func _seg_stairs_up(c: int, r: int) -> Array:
+	var n: int = _pf_rng.randi_range(2, 3)
+	for i in n:
+		c += 2
+		r = maxi(4, r - 2)            # вверх 2, разрыв 2 — гарантированно допрыгиваемо
+		_pf_plat(c, c + 2, r)
+		c += 3
+	return [c, r]
+
+func _seg_stairs_down(c: int, r: int) -> Array:
+	var n: int = _pf_rng.randi_range(2, 3)
+	for i in n:
+		c += 2
+		r = mini(_pf_lower_r - 2, r + 2)
+		_pf_plat(c, c + 3, r)
+		c += 4
+	return [c, r]
+
+func _seg_spike_platform(c: int, r: int) -> Array:
+	var gap: int = _pf_rng.randi_range(2, 3)
+	c += gap
+	r = clampi(r + _pf_rng.randi_range(-1, 1), 4, _pf_lower_r - 2)
+	var pw: int = _pf_rng.randi_range(8, 11)
+	_pf_plat(c, c + pw - 1, r)
+	# Полоса шипов в середине — нужно перепрыгнуть с разбега.
+	var sp_c0: int = c + 3
+	var sp_w: int = _pf_rng.randi_range(2, 3)
+	_pf_spike(sp_c0, sp_c0 + sp_w - 1, r)
+	# Вторая полоса на высокой сложности.
+	if _pf_diff >= 5 and pw >= 10:
+		_pf_spike(c + pw - 4, c + pw - 3, r)
+	return [c + pw, r]
+
+func _seg_narrow_hops(c: int, r: int) -> Array:
+	var n: int = _pf_rng.randi_range(2, 3)
+	for i in n:
+		c += _pf_rng.randi_range(2, 3)
+		r = clampi(r + _pf_rng.randi_range(-2, 1), 4, _pf_lower_r - 2)
+		_pf_plat(c, c + 1, r)        # ширина 2 — точные прыжки
+		c += 2
+	return [c, r]
+
+func _seg_high_ledge(c: int, r: int) -> Array:
+	c += 2
+	r = maxi(4, r - 3)               # высокий прыжок вверх (3 тайла при разрыве 2)
+	var pw: int = _pf_rng.randi_range(5, 7)
+	_pf_plat(c, c + pw - 1, r)
+	return [c + pw, r]
+
+func _seg_spike_pit(c: int, r: int) -> Array:
+	# Яма с шипами и ступенями-камнями над ней. Промахнулся — упал на шипы
+	# (урон + отскок), справа безопасный пандус-выход. Нужно место под яму.
+	if r > _pf_lower_r - 5:
+		return _seg_gap(c, r)
+	c += 2
+	var pit_r: int = r + 3
+	var pit_w: int = _pf_rng.randi_range(7, 10)
+	for cc in range(c, c + pit_w):
+		if cc < grid_cols - 1:
+			grid[pit_r][cc] = 1
+	_pf_spike(c, c + pit_w - 3, pit_r)        # дно — шипы, кроме правого края
+	_pf_plat(c + pit_w - 2, c + pit_w - 1, pit_r)   # безопасный выход из ямы
+	# Камни-ступени над ямой на уровне r.
+	var stones: int = 2 + (1 if _pf_diff >= 4 else 0)
+	var sc: int = c + 1
+	for i in stones:
+		_pf_plat(sc, sc + 1, r)
+		sc += 3
+	# Площадка-выход за ямой.
+	c = c + pit_w + 1
+	_pf_plat(c, c + 4, r)
+	return [c + 5, r]
 
 func _generate_cave():
 	grid.clear()
