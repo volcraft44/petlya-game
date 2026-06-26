@@ -272,7 +272,7 @@ func setup(level: int, enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 	_enemy_scene_ref = enemy_scene
 	_set_biome(level)
 	_determine_challenge_type()
-	_generate_cave()
+	_generate_platformer()
 	_build_collision()
 	_place_torches()
 	_calculate_dark_zones()
@@ -1043,6 +1043,145 @@ func _set_biome(level: int):
 					rock_light    = Color(1.00, 0.95, 0.85)
 					surface_color = Color(1.00, 0.98, 0.92)
 					bg_color      = Color(0.20, 0.15, 0.10)
+
+func _generate_platformer():
+	# === ПЛАТФОРМЕННЫЙ УРОВЕНЬ «ПО ПРАВИЛАМ» ===
+	# Не бездумные блоки, а спроектированный путь: цепочка площадок с
+	# прыжковыми разрывами и перепадами высот СТРОГО в пределах прыжка игрока
+	# (jump=-360, g=980 → ~4 тайла вверх / ~5 в длину). Снизу — общий
+	# страховочный пол + лестницы к каждой площадке: упал — не умер, поднялся
+	# и продолжил. Софтлока быть не может (дверь достижима и по платформам,
+	# и по нижнему полу через крайнюю лестницу) — «в спорных ситуациях за игрока».
+	room_width = 2600.0
+	room_height = 600.0
+	grid_cols = int(room_width / tile_size)
+	grid_rows = int(room_height / tile_size)
+	floor_y = room_height - tile_size * 2
+	ceiling_y = tile_size * 2
+
+	grid.clear()
+	explored.clear()
+	caves.clear()
+	platforms.clear()
+	chests.clear()
+	ladders.clear()
+	oneway_platforms.clear()
+	spikes.clear()
+	poison_pipes.clear()
+	pressure_plates.clear()
+	minimap_rooms.clear()
+
+	# Всё твёрдое, затем вырезаем игровой объём (рамка стен остаётся).
+	for r in grid_rows:
+		var erow := []
+		var row := []
+		for c in grid_cols:
+			erow.append(false)
+			row.append(1)
+		explored.append(erow)
+		grid.append(row)
+
+	var left_wall := 2
+	var right_wall := grid_cols - 3
+	var top_wall := 2
+	for r in range(top_wall, grid_rows):
+		for c in range(left_wall, right_wall + 1):
+			grid[r][c] = 0
+
+	# Нижний страховочный пол.
+	var lower_r := grid_rows - 3
+	for c in range(left_wall, right_wall + 1):
+		for r in range(lower_r, grid_rows):
+			grid[r][c] = 1
+
+	var rng := RandomNumberGenerator.new()
+	# Сложность растёт с уровнем (но всё ещё в пределах прыжка).
+	var diff: int = clampi(room_level, 1, 9)
+
+	var path_r := lower_r - 5
+	var c_cursor := left_wall + 2
+	var platform_tops: Array = []
+
+	# Стартовая площадка (широкая, безопасная).
+	var start_w := 7
+	for c in range(c_cursor, c_cursor + start_w):
+		grid[path_r][c] = 1
+	platform_tops.append({"c0": c_cursor, "c1": c_cursor + start_w - 1, "r": path_r})
+	caves.append({
+		"x": float((c_cursor + 2) * tile_size),
+		"y": float((path_r - 4) * tile_size),
+		"floor_y": float(path_r * tile_size),
+		"type": "start",
+	})
+	c_cursor += start_w
+
+	# Сегменты до правого края — каждый прыжок в безопасном «конверте».
+	while c_cursor < right_wall - 12:
+		# Сначала выбираем разрыв, потом ограничиваем перепад высоты под него,
+		# чтобы комбинация (вверх+вдаль) ВСЕГДА была допрыгиваемой.
+		var gap: int = rng.randi_range(2, 3 + (1 if diff >= 4 else 0))   # 2..4
+		c_cursor += gap
+		var max_up: int
+		if gap >= 4:
+			max_up = 1
+		elif gap == 3:
+			max_up = 2
+		else:
+			max_up = 3
+		var dr: int = rng.randi_range(-max_up, 2)   # вверх трудно, вниз легко
+		path_r = clampi(path_r + dr, top_wall + 3, lower_r - 2)
+		var pw: int = rng.randi_range(4, 7)
+		if c_cursor + pw > right_wall - 2:
+			pw = right_wall - 2 - c_cursor
+		if pw < 3:
+			break
+		for c in range(c_cursor, c_cursor + pw):
+			grid[path_r][c] = 1
+		platform_tops.append({"c0": c_cursor, "c1": c_cursor + pw - 1, "r": path_r})
+		c_cursor += pw
+
+	# Финальная площадка справа + дверь.
+	var end_c0: int = right_wall - 8
+	var end_r: int = clampi(path_r, top_wall + 3, lower_r - 2)
+	for c in range(end_c0, right_wall + 1):
+		grid[end_r][c] = 1
+	platform_tops.append({"c0": end_c0, "c1": right_wall, "r": end_r})
+	caves.append({
+		"x": float((right_wall - 3) * tile_size),
+		"y": float((end_r - 4) * tile_size),
+		"floor_y": float(end_r * tile_size),
+		"type": "door",
+	})
+
+	# Лестницы от каждой площадки вниз к страховочному полу.
+	for pt in platform_tops:
+		var lc: int = int((pt.c0 + pt.c1) / 2)
+		for r in range(pt.r + 1, lower_r):
+			grid[r][lc] = 0
+		ladders.append({
+			"x": float(lc * tile_size + tile_size / 2),
+			"y_top": float(pt.r * tile_size),
+			"y_bottom": float(lower_r * tile_size),
+			"col": lc,
+		})
+
+	# «Нормальные» пещеры для спавна врагов/лута — на площадках и нижнем полу.
+	for pt in platform_tops:
+		if pt.c1 - pt.c0 >= 4 and pt.r != platform_tops[0].r:
+			caves.append({
+				"x": float(int((pt.c0 + pt.c1) / 2) * tile_size),
+				"y": float((pt.r - 3) * tile_size),
+				"floor_y": float(pt.r * tile_size),
+				"type": "normal",
+			})
+	caves.append({
+		"x": float(int((left_wall + right_wall) / 2) * tile_size),
+		"y": float((lower_r - 3) * tile_size),
+		"floor_y": float(lower_r * tile_size),
+		"type": "normal",
+	})
+
+	reachable_set = _get_reachable_tiles()
 
 func _generate_cave():
 	grid.clear()

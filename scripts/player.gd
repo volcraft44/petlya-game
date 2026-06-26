@@ -1252,20 +1252,20 @@ func _physics_process(delta):
 				if is_on_floor() and not Input.is_action_pressed("move_down"):
 					is_on_vine = false
 
-	# Переменная высота прыжка: отпустил пробел пока ещё летим вверх — режем
-	# скорость подъёма (низкий прыжок). Держишь — взлетаем на полную высоту.
-	if is_jump_rising:
-		if velocity.y >= 0.0:
-			is_jump_rising = false
-		elif not Input.is_action_pressed("jump") and not Input.is_action_pressed("move_up"):
-			if velocity.y < JUMP_CUT_VELOCITY:
-				velocity.y = JUMP_CUT_VELOCITY
-			is_jump_rising = false
+	# Переменная высота прыжка (плавно, без резкого обрыва): пока летим вверх
+	# и пробел ОТПУЩЕН — добавляем повышенную гравитацию, и подъём плавно
+	# скругляется. Держишь дольше — выше. Высота полностью аналоговая.
+	var jump_held := Input.is_action_pressed("jump") or Input.is_action_pressed("move_up")
+	if is_jump_rising and velocity.y >= 0.0:
+		is_jump_rising = false   # достигли вершины — режим управления высотой окончен
 
 	if not is_on_vine:
-		# Fast-fall: apply extra gravity when falling (not jumping up) — Dead Cells feel
 		if velocity.y > 0:
-			velocity.y += gravity * 1.5 * delta  # Fall faster
+			# Fast-fall: apply extra gravity when falling — Dead Cells feel
+			velocity.y += gravity * 1.5 * delta
+		elif is_jump_rising and not jump_held:
+			# Подъём с ОТПУЩЕННЫМ прыжком — гасим взлёт сильнее (но плавно).
+			velocity.y += gravity * 3.0 * delta
 		else:
 			velocity.y += gravity * delta
 
