@@ -48,6 +48,11 @@ var was_on_floor: bool = false
 var is_jump_rising: bool = false
 const JUMP_CUT_VELOCITY := -120.0
 
+# Hollow Knight: при касании шипов в паркур-ямах — небольшой урон и возврат
+# на последнюю безопасную точку (где стоял), а не смерть.
+var last_safe_pos: Vector2 = Vector2.ZERO
+var _safe_pos_cd: float = 0.0
+
 # Hit-stop — freeze for a few frames when landing a hit
 var hit_stop_timer: float = 0.0
 
@@ -1079,6 +1084,13 @@ func _physics_process(delta):
 			queue_redraw()
 		coyote_timer = coyote_time
 		was_on_floor = true
+		# Запоминаем последнюю БЕЗОПАСНУЮ точку на полу (для HK-возврата с шипов).
+		# Обновляем пока стоим на твёрдом полу — это и есть точка, откуда прыгал.
+		if not is_dead and not invincible:
+			_safe_pos_cd -= delta
+			if _safe_pos_cd <= 0.0:
+				_safe_pos_cd = 0.1
+				last_safe_pos = global_position
 	else:
 		if was_on_floor:
 			coyote_timer = coyote_time
@@ -3424,6 +3436,23 @@ func _draw_pickaxe(s: int):
 # ───────────────────────────────────────────────────────────────────
 # CS FEATURES: Inspect / Smoke / Flash
 # ───────────────────────────────────────────────────────────────────
+
+func hazard_bounce() -> void:
+	# Hollow Knight-стиль: коснулся шипов в паркур-яме — небольшой урон и
+	# возврат на последнюю безопасную точку. Не смерть, не бесконечная петля
+	# (take_damage даёт неуязвимость на 0.8с).
+	if is_dead or invincible or dash_invuln or is_rolling:
+		return
+	if last_safe_pos == Vector2.ZERO:
+		last_safe_pos = global_position
+	take_damage(8, Vector2.ZERO)
+	if is_dead:
+		return
+	global_position = last_safe_pos
+	velocity = Vector2.ZERO
+	is_jump_rising = false
+	dash_active = false
+	screen_shake.emit(2.5, 0.12)
 
 func apply_contact_push(dir: Vector2) -> void:
 	# Лёгкий отпор от тела врага: выталкиваем игрока наружу, чтобы он не мог

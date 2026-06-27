@@ -1386,6 +1386,39 @@ func _postprocess_platformer():
 					sb_added += 1
 					break
 
+	# 3) ПАРКУР-ЯМЫ С ШИПАМИ (Hollow Knight): в ровном полу вырезаем разрыв в
+	#    пределах прыжка, под ним — яма с шипами на дне. Перепрыгни; упал —
+	#    вернёшься на безопасную точку (см. player.hazard_bounce).
+	var pits_added := 0
+	var c3 := 12
+	while c3 < grid_cols - 12 and pits_added < 8:
+		c3 += rng.randi_range(9, 16)
+		if absi(c3 - sx_tile) <= 8:
+			continue
+		for rr in range(6, grid_rows - 6):
+			if grid[rr][c3] == 1 and grid[rr - 1][c3] == 0 and grid[rr - 2][c3] == 0:
+				# Проверяем ровную площадку (заход + посадка) шириной 7.
+				var flat := true
+				for dc in range(-1, 6):
+					var cx: int = c3 + dc
+					if cx < 1 or cx >= grid_cols - 1 or grid[rr][cx] != 1 or grid[rr - 1][cx] != 0:
+						flat = false
+						break
+				if flat:
+					var gapw: int = rng.randi_range(3, 4)   # в пределах прыжка
+					for dc in range(1, 1 + gapw):
+						grid[rr][c3 + dc] = 0
+						grid[rr + 1][c3 + dc] = 0
+						grid[rr + 2][c3 + dc] = 0
+						grid[rr + 3][c3 + dc] = 1   # дно ямы
+					spikes.append({
+						"x": float((c3 + 1) * tile_size),
+						"y": float((rr + 3) * tile_size),
+						"w": float(gapw * tile_size),
+					})
+					pits_added += 1
+				break
+
 func _generate_cave():
 	grid.clear()
 	explored.clear()
@@ -2977,12 +3010,15 @@ func _process(delta):
 	if player_ref and is_instance_valid(player_ref) and not player_ref.is_dead:
 		var px = player_ref.global_position.x
 		var py = player_ref.global_position.y
-		# Spikes — damage on contact with upward knockback
+		# Шипы в паркур-ямах — Hollow Knight: касание = малый урон + возврат
+		# на безопасную точку (где стоял), а не просто отскок.
 		for sp in spikes:
 			if px > sp.x and px < sp.x + sp.w and py > sp.y - 8 and py < sp.y + 4:
-				var spike_center_x = sp.x + sp.w * 0.5
-				var kb_dir_x = 1.0 if px > spike_center_x else -1.0
-				player_ref.take_damage(10, Vector2(kb_dir_x * 0.5, -1.0).normalized())
+				if player_ref.has_method("hazard_bounce"):
+					player_ref.hazard_bounce()
+				else:
+					player_ref.take_damage(10, Vector2(0, -1))
+				break
 		# Блоки шипов — бьют при касании с ЛЮБОЙ стороны (ловушки/препятствия).
 		# Хитбокс игрока ~7x16 с центром (px, py-8): проверяем пересечение с тайлом.
 		if _spike_hit_cd <= 0.0:
