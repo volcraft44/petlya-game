@@ -1300,14 +1300,17 @@ func _seg_spike_pit(c: int, r: int) -> Array:
 	_pf_plat(c, c + 4, r)
 	return [c + 5, r]
 
-func _add_spike_block(c: int, r: int, dir: String) -> void:
+func _add_spike_block(c: int, r: int) -> void:
 	if c < 1 or c >= grid_cols - 1 or r < 1 or r >= grid_rows - 1:
 		return
 	# Не дублируем блок в той же клетке.
 	for sb in spike_blocks:
 		if sb.c == c and sb.r == r:
 			return
-	spike_blocks.append({"c": c, "r": r, "dir": dir})
+	# Блок шипов — ТВЁРДЫЙ тайл (часть геометрии), обклеенный шипами со всех
+	# сторон. Игрок об него стукается и должен обойти/перепрыгнуть.
+	grid[r][c] = 1
+	spike_blocks.append({"c": c, "r": r})
 
 func _postprocess_platformer():
 	# Превращаем пещеру в платформенный вызов: парящие платформы для запрыгивания
@@ -1350,44 +1353,38 @@ func _postprocess_platformer():
 						for cc in range(c, c + pw):
 							grid[pr][cc] = 1
 						plats_added += 1
-						# Иногда — блок шипов на этой платформе (перепрыгнуть).
-						if rng.randf() < 0.30 and pw >= 4:
-							_add_spike_block(c + int(pw / 2), pr - 1, "up")
+						# Иногда — блок шипов на краю платформы (перепрыгнуть).
+						if rng.randf() < 0.30 and pw >= 4 and grid[pr - 2][c + 1] == 0:
+							_add_spike_block(c + int(pw / 2), pr - 1)
 			else:
 				r += 1
 
-	# 2) Блоки шипов как ловушки — на полах, потолках и стенах.
+	# 2) БЛОКИ ШИПОВ — твёрдые тайлы, обклеенные шипами со всех сторон.
+	#    Ставим как препятствия: на полу (перепрыгнуть) и парящие в открытых
+	#    залах (облететь). Никогда не перекрываем единственный узкий проход:
+	#    напольные имеют запас сверху, парящие окружены воздухом со всех сторон.
 	var sb_added := 0
 	var c2 := 6
-	while c2 < grid_cols - 6 and sb_added < 55:
-		c2 += rng.randi_range(3, 7)
+	while c2 < grid_cols - 6 and sb_added < 45:
+		c2 += rng.randi_range(3, 6)
 		if absi(c2 - sx_tile) <= 5:
 			continue
-		var kind := rng.randi() % 3
-		for rr in range(5, grid_rows - 3):
-			if kind == 0:
-				# Пол: острия вверх (блок в воздухе над твёрдым полом).
-				if grid[rr][c2] == 1 and grid[rr - 1][c2] == 0 and grid[rr - 2][c2] == 0:
-					_add_spike_block(c2, rr - 1, "up")
+		if rng.randf() < 0.5:
+			# На полу: твёрдый шип-блок на земле (есть куда перепрыгнуть).
+			for rr in range(6, grid_rows - 3):
+				if grid[rr][c2] == 1 and grid[rr - 1][c2] == 0 \
+					and grid[rr - 2][c2] == 0 and grid[rr - 3][c2] == 0:
+					_add_spike_block(c2, rr - 1)
 					sb_added += 1
 					break
-			elif kind == 1:
-				# Потолок: острия вниз (блок в воздухе под твёрдым потолком).
-				if grid[rr][c2] == 1 and grid[rr + 1][c2] == 0 and grid[rr + 2][c2] == 0:
-					_add_spike_block(c2, rr + 1, "down")
+		else:
+			# Парящий: клетка и все 4 соседа — воздух (не перекроет проход).
+			for rr in range(6, grid_rows - 4):
+				if grid[rr][c2] == 0 and grid[rr - 1][c2] == 0 and grid[rr + 1][c2] == 0 \
+					and grid[rr][c2 - 1] == 0 and grid[rr][c2 + 1] == 0:
+					_add_spike_block(c2, rr)
 					sb_added += 1
 					break
-			else:
-				# Стена: острия в проход вбок.
-				if grid[rr][c2] == 0:
-					if c2 > 1 and grid[rr][c2 - 1] == 1 and grid[rr][c2 + 1] == 0:
-						_add_spike_block(c2, rr, "right")
-						sb_added += 1
-						break
-					elif c2 < grid_cols - 2 and grid[rr][c2 + 1] == 1 and grid[rr][c2 - 1] == 0:
-						_add_spike_block(c2, rr, "left")
-						sb_added += 1
-						break
 
 func _generate_cave():
 	grid.clear()
@@ -5009,41 +5006,34 @@ func _draw_traps():
 			if fmod(float(i) * 3.7, 5.0) < 1.0:
 				draw_circle(Vector2(sx, y - 4), 1.0, Color(0.6, 0.1, 0.1, 0.4))
 
-	# Блоки шипов — тайловые ловушки. Острия смотрят по dir.
+	# БЛОКИ ШИПОВ — твёрдый блок, обклеенный шипами со ВСЕХ сторон.
 	for sb in spike_blocks:
 		var bx: float = sb.c * tile_size
 		if bx + tile_size < vx0 or bx > vx1:
 			continue
 		var by: float = sb.r * tile_size
 		var ts: float = float(tile_size)
-		var dir: String = sb.get("dir", "up")
-		# Тёмное основание-блок
-		draw_rect(Rect2(bx, by, ts, ts), Color(0.16, 0.16, 0.2, 0.85))
-		var teeth := 4
-		var metal := Color(0.55, 0.56, 0.62, 0.95)
-		var tip := Color(0.82, 0.84, 0.9, 0.9)
+		# Тело блока (тёмный металл) поверх тайла, чтобы читался как опасный.
+		draw_rect(Rect2(bx + 1, by + 1, ts - 2, ts - 2), Color(0.20, 0.19, 0.23, 1.0))
+		draw_rect(Rect2(bx + 2, by + 2, ts - 4, 2.0), Color(0.34, 0.32, 0.38, 0.8))
+		var metal := Color(0.62, 0.64, 0.70, 0.97)
+		var teeth := 3
 		for i in teeth:
-			var f0 := bx + ts * (float(i) + 0.1) / teeth
-			var f1 := bx + ts * (float(i) + 0.9) / teeth
-			var fmid := (f0 + f1) * 0.5
-			var g0 := by + ts * (float(i) + 0.1) / teeth
-			var g1 := by + ts * (float(i) + 0.9) / teeth
-			var gmid := (g0 + g1) * 0.5
-			match dir:
-				"down":
-					draw_colored_polygon(PackedVector2Array([
-						Vector2(f0, by), Vector2(f1, by), Vector2(fmid, by + ts)]), metal)
-					draw_line(Vector2(fmid, by + ts), Vector2(fmid, by + ts * 0.5), tip, 0.7)
-				"left":
-					draw_colored_polygon(PackedVector2Array([
-						Vector2(bx + ts, g0), Vector2(bx + ts, g1), Vector2(bx, gmid)]), metal)
-				"right":
-					draw_colored_polygon(PackedVector2Array([
-						Vector2(bx, g0), Vector2(bx, g1), Vector2(bx + ts, gmid)]), metal)
-				_:  # up
-					draw_colored_polygon(PackedVector2Array([
-						Vector2(f0, by + ts), Vector2(f1, by + ts), Vector2(fmid, by)]), metal)
-					draw_line(Vector2(fmid, by), Vector2(fmid, by + ts * 0.5), tip, 0.7)
+			var a0 := (float(i) + 0.15) / teeth
+			var a1 := (float(i) + 0.85) / teeth
+			var am := (a0 + a1) * 0.5
+			# верх
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(bx + ts * a0, by), Vector2(bx + ts * a1, by), Vector2(bx + ts * am, by - 5.0)]), metal)
+			# низ
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(bx + ts * a0, by + ts), Vector2(bx + ts * a1, by + ts), Vector2(bx + ts * am, by + ts + 5.0)]), metal)
+			# лево
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(bx, by + ts * a0), Vector2(bx, by + ts * a1), Vector2(bx - 5.0, by + ts * am)]), metal)
+			# право
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(bx + ts, by + ts * a0), Vector2(bx + ts, by + ts * a1), Vector2(bx + ts + 5.0, by + ts * am)]), metal)
 
 	# Poison pools (with optional pipes)
 	for pp in poison_pipes:
