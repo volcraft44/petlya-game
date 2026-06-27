@@ -3445,7 +3445,7 @@ func hazard_bounce() -> void:
 		return
 	if last_safe_pos == Vector2.ZERO:
 		last_safe_pos = global_position
-	take_damage(8, Vector2.ZERO)
+	take_damage(24, Vector2.ZERO)   # ×3 урона от шипов
 	if is_dead:
 		return
 	global_position = last_safe_pos

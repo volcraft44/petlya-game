@@ -3019,20 +3019,23 @@ func _process(delta):
 				else:
 					player_ref.take_damage(10, Vector2(0, -1))
 				break
-		# Блоки шипов — бьют при касании с ЛЮБОЙ стороны (ловушки/препятствия).
-		# Хитбокс игрока ~7x16 с центром (px, py-8): проверяем пересечение с тайлом.
+		# Блоки шипов — ТВЁРДЫЕ кубы, обклеенные шипами со всех сторон. Игрок об
+		# них стукается (коллизия не даёт войти внутрь), поэтому проверяем
+		# КАСАНИЕ ПОВЕРХНОСТИ: хитбокс игрока (~7x16, центр px, py-8) против
+		# клетки блока, расширенной на запас. Иначе бок/верх не регистрировались.
 		if _spike_hit_cd <= 0.0:
+			var m := 5.0   # = длина нарисованных шипов, торчащих за клетку блока
 			for sb in spike_blocks:
 				var bx: float = sb.c * tile_size
 				var by: float = sb.r * tile_size
-				if px + 4.0 > bx and px - 4.0 < bx + tile_size \
-					and py > by - 1.0 and py - 16.0 < by + tile_size:
+				if px + 3.5 > bx - m and px - 3.5 < bx + tile_size + m \
+					and py > by - m and py - 16.0 < by + tile_size + m:
 					var bcx: float = bx + tile_size * 0.5
 					var bcy: float = by + tile_size * 0.5
 					var kdir := Vector2(px - bcx, (py - 8.0) - bcy)
 					if kdir.length() < 0.5:
 						kdir = Vector2(0, -1)
-					player_ref.take_damage(12, kdir.normalized())
+					player_ref.take_damage(36, kdir.normalized())   # ×3 урона
 					_spike_hit_cd = 0.6   # анти-спам урона
 					break
 		# Poison pools — DOT or heal (acid_water card)
