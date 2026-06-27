@@ -78,6 +78,7 @@ var roll_speed: float = 220.0
 var roll_cooldown_timer: float = 0.0
 var roll_cooldown: float = 0.5
 var roll_direction: float = 0.0
+var roll_extend: float = 0.0   # продление кувырка пока негде встать (низкий потолок)
 var normal_collision_mask: int = 0
 
 # Swing combo
@@ -599,8 +600,8 @@ func _process(delta):
 		scroll_slide_timer -= delta
 		if scroll_slide_timer <= 0:
 			scroll_slide_active = false
-			body_collision.shape.size = Vector2(10, 22)
-			body_collision.position = Vector2(0, -11)
+			body_collision.shape.size = Vector2(7, 16)
+			body_collision.position = Vector2(0, -8)
 
 	if weapon_msg_timer > 0:
 		weapon_msg_timer -= delta
@@ -798,13 +799,21 @@ func _process(delta):
 	if is_rolling:
 		roll_timer -= delta
 		if roll_timer <= 0:
-			is_rolling = false
-			invincible = false
-			collision_layer = 1
-			collision_mask = normal_collision_mask
-			# Restore normal collision size
-			body_collision.shape.size = Vector2(10, 22)
-			body_collision.position = Vector2(0, -11)
+			# Не вставать в блоках: если над головой низкий потолок — продолжаем
+			# катиться (до разумного предела), пока не выкатимся туда, где можно
+			# встать в полный рост.
+			if not _can_stand_here() and roll_extend < 0.8:
+				roll_extend += delta
+				roll_timer = 0.0   # держим кувырок активным, едем дальше
+			else:
+				is_rolling = false
+				roll_extend = 0.0
+				invincible = false
+				collision_layer = 1
+				collision_mask = normal_collision_mask
+				# Возвращаем обычный (прощающий) хитбокс.
+				body_collision.shape.size = Vector2(7, 16)
+				body_collision.position = Vector2(0, -8)
 
 	if roll_cooldown_timer > 0:
 		roll_cooldown_timer -= delta
@@ -1737,8 +1746,29 @@ func _do_attack():
 
 	swing_index = (swing_index + 1) % 3
 
+func _can_stand_here() -> bool:
+	# Есть ли над головой место, чтобы встать в полный рост (стоячий хитбокс
+	# ~16px над ступнями) и не оказаться в блоках. Читаем сетку комнаты.
+	var room = _find_room()
+	if room == null or not ("grid" in room):
+		return true
+	var ts: int = room.tile_size
+	if ts <= 0:
+		return true
+	var gx: int = int(global_position.x / ts)
+	if gx < 0 or gx >= room.grid_cols:
+		return true
+	# Тайлы, которые займёт стоячий хитбокс (от ступней вверх на ~15px).
+	var r0: int = int((global_position.y - 15.0) / ts)
+	var r1: int = int((global_position.y - 1.0) / ts)
+	for rr in range(r0, r1 + 1):
+		if rr >= 0 and rr < room.grid_rows and room.grid[rr][gx] == 1:
+			return false
+	return true
+
 func _do_roll():
 	is_rolling = true
+	roll_extend = 0.0
 	roll_timer = roll_duration
 	roll_cooldown_timer = roll_cooldown
 	invincible = true
