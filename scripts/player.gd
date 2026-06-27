@@ -484,9 +484,9 @@ const BHOP_MIN_INTERVAL: float = 0.30    # минимум сек между бho
 # === DASH (ULTRAKILL-style charges) ===
 const DASH_MAX_CHARGES: int = 2
 const DASH_RECHARGE_TIME: float = 1.5
-# Дэш уменьшен — короткий рывок для платформинга, а не длинный полёт.
-const DASH_DURATION: float = 0.12
-const DASH_SPEED: float = 270.0
+# Дэш в духе Celeste: чёткий рывок ~4 тайла, не длинный полёт и не микро-рывок.
+const DASH_DURATION: float = 0.15
+const DASH_SPEED: float = 440.0
 var dash_charges: float = 3.0       # дробное, чтобы плавно копилось
 var dash_active: bool = false
 var dash_timer: float = 0.0
@@ -991,12 +991,15 @@ func _physics_process(delta):
 			dash_active = false
 			dash_invuln = false
 			collision_layer = 1   # возвращаем "player" слой
-			# Если на полу при выходе из dash — даём моментум-бустер: +1 стэк bhop
-			if is_on_floor():
-				_add_bhop_stack("DASH→BHOP")
+			# Плавный выход (Celeste-feel): сохраняем часть импульса, чтобы не
+			# было резкого стопа, но и не уносило. Вертикаль гасим.
+			velocity.x = dash_dir.x * 175.0
+			if dash_dir.y < 0.0:
+				velocity.y = maxf(velocity.y, -150.0)   # мягкий остаток подъёма
+			elif dash_dir.y > 0.0:
+				velocity.y = 120.0
 			else:
-				# В воздухе оставляем окно открытым для bhop при следующем приземлении
-				bhop_window_t = BHOP_WINDOW * 1.5
+				velocity.y = 0.0
 		return  # пропускаем остальной физпроцесс — даш сам по себе
 
 	# Если игрок убегает от стэка — теряем (отпустил направление в воздухе)
