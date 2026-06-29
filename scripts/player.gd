@@ -1629,8 +1629,9 @@ func _unhandled_input(event):
 				if can_attack:
 					_do_ranged_attack(special)
 
-	# === DASH (ULTRAKILL): LCtrl ===
-	if event is InputEventKey and event.pressed and event.keycode == KEY_CTRL and not event.echo:
+	# === DASH: Shift (на ПК), Ctrl оставлен для кнопки рывка на телефоне ===
+	if event is InputEventKey and event.pressed and not event.echo \
+		and (event.keycode == KEY_SHIFT or event.keycode == KEY_CTRL):
 		if not is_dead and not dash_active and dash_charges >= 1.0:
 			_do_dash()
 

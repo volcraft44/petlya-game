@@ -5,14 +5,18 @@ signal died(enemy)
 # Enemy types
 enum EnemyClass { ARCHER, CROSSBOW, THROWER, SHIELDMAN, FLY, STEALTH, MAGE, SPIDER,
 	SUMMONER, RAT, MUMMY, BEETLE, MOSQUITO, ZOMBIE_CORPSE,
-	KNIGHT, HERETIC, DOG }
+	KNIGHT, HERETIC, DOG, BRUTE }
 
 # Классы с программной анимацией — выносим в константу, чтобы не создавать
 # массив каждый кадр у каждого врага.
 const ANIMATED_CLASSES := [EnemyClass.FLY, EnemyClass.STEALTH, EnemyClass.MAGE,
 	EnemyClass.SPIDER, EnemyClass.SUMMONER, EnemyClass.RAT, EnemyClass.MUMMY,
 	EnemyClass.BEETLE, EnemyClass.MOSQUITO, EnemyClass.ZOMBIE_CORPSE,
-	EnemyClass.KNIGHT, EnemyClass.HERETIC, EnemyClass.DOG]
+	EnemyClass.KNIGHT, EnemyClass.HERETIC, EnemyClass.DOG, EnemyClass.BRUTE]
+
+# Станящие атаки: некоторые враги (тяжёлые/дробящие) глушат игрока ударом.
+var stuns_on_hit: bool = false
+var stun_power: float = 0.0
 
 @export var enemy_class: int = EnemyClass.SHIELDMAN
 @export var speed: float = 35.0
@@ -459,6 +463,34 @@ func _setup_class():
 			damage = 25
 			dog_lunge_timer = 0.0
 			dog_howl_timer = randf_range(5.0, 10.0)
+		EnemyClass.BRUTE:
+			# Тяжёлый громила: бьёт медленно (2с кд, долгий замах), но КАЖДЫЙ
+			# удар оглушает и наносит много урона. Появляется со 2-й локации.
+			speed = 30.0
+			attack_range = 30.0
+			attack_cooldown = 2.0
+			detection_range = 190.0
+			max_health = 110
+			health = max_health
+			damage = 38
+			contact_radius = 22.0
+			stuns_on_hit = true
+			stun_power = 1.1
+
+	# Станящие удары у тяжёлых/дробящих врагов (которым это подходит).
+	match enemy_class:
+		EnemyClass.SHIELDMAN:
+			stuns_on_hit = true
+			stun_power = 0.5
+		EnemyClass.MUMMY:
+			stuns_on_hit = true
+			stun_power = 0.6
+		EnemyClass.KNIGHT:
+			stuns_on_hit = true
+			stun_power = 0.45
+		EnemyClass.ZOMBIE_CORPSE:
+			stuns_on_hit = true
+			stun_power = 0.4
 
 func _process(delta):
 	# Stun timer
@@ -1158,6 +1190,13 @@ func _physics_process(delta):
 					if dist_to_player < attack_range and can_attack:
 						_throw_attack(dir_to_player)
 
+				EnemyClass.BRUTE:
+					# Громила медленно идёт к игроку и бьёт тяжёлым станящим ударом.
+					if dist_to_player > attack_range:
+						move_x = sign(dir_to_player.x) * speed
+					elif can_attack:
+						_melee_attack()
+
 				EnemyClass.SHIELDMAN:
 					var block_range = attack_range + 10 if is_spear else 40.0
 					is_blocking = dist_to_player < block_range and dist_to_player > 10 and not shield_broken
@@ -1307,12 +1346,14 @@ func flash_white():
 	queue_redraw()
 
 func _melee_attack():
-	telegraph_timer = 0.2
-	telegraph_duration = 0.2
+	# Тяжёлые/станящие враги бьют с заметным замахом (долгий удар).
+	var tele: float = 0.5 if stuns_on_hit else 0.2
+	telegraph_timer = tele
+	telegraph_duration = tele
 	can_attack = false
 	attack_timer = attack_cooldown
 	is_attacking_melee = true
-	melee_anim_timer = 0.25
+	melee_anim_timer = maxf(0.25, tele)
 
 	if player and is_instance_valid(player):
 		var dist = global_position.distance_to(player.global_position)
@@ -1328,6 +1369,9 @@ func _melee_attack():
 				return
 			var dir = (player.global_position - global_position).normalized()
 			player.take_damage(damage, dir)
+			# Оглушаем игрока, если это станящий враг.
+			if stuns_on_hit and not player.is_dead and player.has_method("stun"):
+				player.stun(stun_power)
 
 func _attack_crystal():
 	can_attack = false
@@ -1875,6 +1919,8 @@ func _draw():
 		_draw_heretic(s)
 	elif enemy_class == EnemyClass.DOG:
 		_draw_dog(s)
+	elif enemy_class == EnemyClass.BRUTE:
+		_draw_brute(s)
 	else:
 		match enemy_class:
 			EnemyClass.ARCHER: _draw_archer(s)
@@ -2581,6 +2627,35 @@ func _draw_heretic(s: int):
 	draw_circle(Vector2(tx, -28 + flicker * 0.3), 3.5, Color(1.0, 0.55, 0.05, 0.80))
 	draw_circle(Vector2(tx + sin(t * 5) * 1.2, -31 + flicker * 0.5), 2.2, Color(1.0, 0.80, 0.10, 0.70))
 	draw_circle(Vector2(tx, -33 + flicker),                           1.2, Color(1.0, 1.00, 0.60, 0.50))
+
+func _draw_brute(s: int):
+	# Тяжёлый громила: крупный, мускулистый, с огромными кулаками. Во время
+	# замаха (telegraph) светится красным — видно, что сейчас прилетит.
+	var winding := telegraph_timer > 0.0
+	var skin := Color(0.40, 0.30, 0.32) if not winding else Color(0.55, 0.28, 0.26)
+	var dark := Color(0.26, 0.19, 0.21)
+	# Ноги
+	draw_rect(Rect2(-7, -7, 5, 7), dark)
+	draw_rect(Rect2(2, -7, 5, 7), dark)
+	# Массивный торс
+	draw_rect(Rect2(-11, -30, 22, 24), skin)
+	draw_rect(Rect2(-9, -29, 18, 8), Color(skin.r + 0.08, skin.g + 0.06, skin.b + 0.06))
+	# Плечи-горы
+	draw_rect(Rect2(-15, -30, 6, 9), skin)
+	draw_rect(Rect2(9, -30, 6, 9), skin)
+	# Маленькая голова, вжатая в плечи
+	draw_rect(Rect2(-5, -38, 10, 9), Color(skin.r + 0.05, skin.g + 0.03, skin.b + 0.03))
+	# Злые глаза
+	var eye := Color(1.0, 0.85, 0.2, 0.95) if not winding else Color(1.0, 0.2, 0.1, 1.0)
+	draw_circle(Vector2(-2.5, -34), 1.4, eye)
+	draw_circle(Vector2(2.5, -34), 1.4, eye)
+	# Огромный кулак на стороне взгляда (заносится при замахе)
+	var fist_x := s * 15.0
+	var fist_y := -20.0 - (8.0 if winding else 0.0)
+	draw_rect(Rect2(fist_x - 5, fist_y - 5, 10, 10), dark)
+	draw_rect(Rect2(fist_x - 4, fist_y - 4, 8, 4), skin)
+	# Связка кулака с телом
+	draw_line(Vector2(s * 9, -24), Vector2(fist_x, fist_y), skin, 4.0)
 
 func _draw_dog(s: int):
 	var t = dog_leg_phase

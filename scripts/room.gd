@@ -2591,6 +2591,7 @@ func _spawn_enemies(enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 		weighted_classes.append([10, 3])  # MUMMY
 		weighted_classes.append([12, 3])  # MOSQUITO
 		weighted_classes.append([13, 2])  # ZOMBIE_CORPSE
+		weighted_classes.append([17, 2])  # BRUTE — тяжёлый станящий громила
 
 	else:
 		# === LOCATION 3: Forsaken Halls — knights, herectics, dogs ===
@@ -2599,6 +2600,7 @@ func _spawn_enemies(enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 		weighted_classes.append([16, 4])  # DOG
 		weighted_classes.append([7,  1])  # SPIDER (holdover)
 		weighted_classes.append([13, 1])  # ZOMBIE_CORPSE (holdover)
+		weighted_classes.append([17, 2])  # BRUTE — тяжёлый станящий громила
 
 	var shieldman_count = 0
 	var max_shieldmen = 3 + (room_level / 3)
@@ -2607,6 +2609,8 @@ func _spawn_enemies(enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 	var max_summoners = 2  # never more than 2 summoners per room
 	var knight_count = 0
 	var max_knights = 3
+	var brute_count = 0
+	var max_brutes = 3
 	var heretic_groups_spawned = 0
 	var max_heretic_groups = 3  # 3 packs × 5 = up to 15 herectics
 
@@ -2628,6 +2632,11 @@ func _spawn_enemies(enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 				eclass = weighted_classes[0][0]
 			else:
 				knight_count += 1
+		if eclass == 17:  # BRUTE cap
+			if brute_count >= max_brutes:
+				eclass = weighted_classes[0][0]
+			else:
+				brute_count += 1
 		if eclass == 15:  # HERETIC — spawn whole group, skip normal path
 			if heretic_groups_spawned < max_heretic_groups:
 				heretic_groups_spawned += 1
@@ -2648,6 +2657,8 @@ func _spawn_enemies(enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 		elif eclass == 14:  # KNIGHT — setup_class handles its own HP/dmg, pass 0
 			hp = 0; dmg = 0  # _setup_class() overrides these for KNIGHT
 		elif eclass == 16:  # DOG — setup_class handles its own HP/dmg
+			hp = 0; dmg = 0
+		elif eclass == 17:  # BRUTE — тяжёлый громила, свои HP/урон/стан
 			hp = 0; dmg = 0
 
 		enemy.setup(eclass, hp, spd, dmg)
