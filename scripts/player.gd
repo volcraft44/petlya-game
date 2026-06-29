@@ -3379,26 +3379,35 @@ func _draw_sword(s: int):
 		else:  # Horizontal
 			var swing_angle: float
 			if attack_is_heavy:
-				# ЗАМАХ: первые ~45% заносим оружие назад (медленно), затем
-				# резкий мах вперёд. Простая, но читаемая анимация удара.
+				# ЗАМАХ СВЕРХУ ВНИЗ (оверхед): заносим оружие НАД головой, затем
+				# с силой рубим вниз. Тяжёлый, читаемый удар.
 				if swing_progress < 0.45:
-					swing_angle = lerp(-0.6, -1.5, swing_progress / 0.45)
+					swing_angle = lerp(-0.4, -1.95, swing_progress / 0.45)   # занос над головой
 				else:
-					swing_angle = lerp(-1.5, 1.2, (swing_progress - 0.45) / 0.55)
+					swing_angle = lerp(-1.95, 1.5, (swing_progress - 0.45) / 0.55)  # рубим вниз
 			else:
 				match swing_index:
 					0: swing_angle = lerp(-0.6, 1.0, swing_progress)
 					1: swing_angle = lerp(1.0, -0.6, swing_progress)
 					_: swing_angle = lerp(-1.2, 0.8, swing_progress)
 			var extra_len = 2 if swing_index == 2 else 0
-			var tip = base + Vector2(cos(swing_angle) * (blade_len + extra_len) * s, sin(swing_angle) * (6 + extra_len * 3))
+			# Для оверхеда остриё ходит по ПОЛНОЙ дуге (вверх→вниз), для лёгких
+			# оружий — почти горизонтально, как раньше.
+			var vmul: float = float(blade_len) if attack_is_heavy else (6.0 + extra_len * 3.0)
+			var tip = base + Vector2(cos(swing_angle) * (blade_len + extra_len) * s, sin(swing_angle) * vmul)
 			var trail_s = max(0, swing_progress - 0.3)
 			var trail_angle2: float
-			match swing_index:
-				0: trail_angle2 = lerp(-0.6, 1.0, trail_s)
-				1: trail_angle2 = lerp(1.0, -0.6, trail_s)
-				_: trail_angle2 = lerp(-1.2, 0.8, trail_s)
-			var trail_tip = base + Vector2(cos(trail_angle2) * (blade_len - 1) * s, sin(trail_angle2) * 6)
+			if attack_is_heavy:
+				if trail_s < 0.45:
+					trail_angle2 = lerp(-0.4, -1.95, trail_s / 0.45)
+				else:
+					trail_angle2 = lerp(-1.95, 1.5, (trail_s - 0.45) / 0.55)
+			else:
+				match swing_index:
+					0: trail_angle2 = lerp(-0.6, 1.0, trail_s)
+					1: trail_angle2 = lerp(1.0, -0.6, trail_s)
+					_: trail_angle2 = lerp(-1.2, 0.8, trail_s)
+			var trail_tip = base + Vector2(cos(trail_angle2) * (blade_len - 1) * s, sin(trail_angle2) * vmul)
 			draw_line(trail_tip, tip, blade_trail, blade_w + 1.5)
 			draw_line(base, tip, blade_col, blade_w)
 			draw_line(base + Vector2(0, -1), tip + Vector2(0, -1), blade_glow, 1.0)
