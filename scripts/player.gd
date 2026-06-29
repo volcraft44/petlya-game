@@ -30,6 +30,8 @@ var is_shielding: bool = false
 var can_attack: bool = true
 var attack_timer: float = 0.0
 var attack_anim_timer: float = 0.0
+var attack_anim_dur: float = 0.15   # длительность анимации текущего взмаха
+var attack_is_heavy: bool = false   # тяжёлое/медленное оружие — с замахом
 var invincible: bool = false
 var invincible_timer: float = 0.0
 var is_dead: bool = false
@@ -1718,7 +1720,14 @@ func _do_attack():
 	is_attacking = true
 	can_attack = false
 	attack_timer = wd.cooldown
-	attack_anim_timer = min(wd.cooldown * 0.6, 0.15)
+	# Тяжёлое/редко бьющее оружие (молоты, якорь, моргенштерн, копьё и всё с
+	# долгим кулдауном) — играем заметный ЗАМАХ. Остальное бьёт быстро.
+	attack_is_heavy = wd.cooldown >= 0.85 or current_weapon in [4, 6, 15, 17, 19]
+	if attack_is_heavy:
+		attack_anim_dur = clampf(wd.cooldown * 0.55, 0.30, 0.45)
+	else:
+		attack_anim_dur = min(wd.cooldown * 0.6, 0.15)
+	attack_anim_timer = attack_anim_dur
 	attack_shape.disabled = false
 	attacked.emit()
 
@@ -3322,7 +3331,9 @@ func _draw_sword(s: int):
 	var blade_trail = Color(wd.glow.r, wd.glow.g, wd.glow.b, 0.2)
 	var blade_glow = wd.glow
 	var blade_len = wd.blade_len
-	var anim_dur = max(0.05, wd.cooldown * 0.6)
+	# Длительность берём из реально заданной анимации взмаха (см. _do_attack),
+	# чтобы прогресс взмаха шёл от 0 до 1 целиком (а не обрезался).
+	var anim_dur = max(0.05, attack_anim_dur)
 	var blade_w = 2.5
 	var is_hammer_type = current_weapon == 4 or current_weapon == 6
 	var is_dual = current_weapon == 3 or current_weapon == 5
@@ -3367,10 +3378,18 @@ func _draw_sword(s: int):
 			draw_line(base + Vector2(-3, 0), base + Vector2(3, 0), Color(0.6, 0.5, 0.2), 2.5)
 		else:  # Horizontal
 			var swing_angle: float
-			match swing_index:
-				0: swing_angle = lerp(-0.6, 1.0, swing_progress)
-				1: swing_angle = lerp(1.0, -0.6, swing_progress)
-				_: swing_angle = lerp(-1.2, 0.8, swing_progress)
+			if attack_is_heavy:
+				# ЗАМАХ: первые ~45% заносим оружие назад (медленно), затем
+				# резкий мах вперёд. Простая, но читаемая анимация удара.
+				if swing_progress < 0.45:
+					swing_angle = lerp(-0.6, -1.5, swing_progress / 0.45)
+				else:
+					swing_angle = lerp(-1.5, 1.2, (swing_progress - 0.45) / 0.55)
+			else:
+				match swing_index:
+					0: swing_angle = lerp(-0.6, 1.0, swing_progress)
+					1: swing_angle = lerp(1.0, -0.6, swing_progress)
+					_: swing_angle = lerp(-1.2, 0.8, swing_progress)
 			var extra_len = 2 if swing_index == 2 else 0
 			var tip = base + Vector2(cos(swing_angle) * (blade_len + extra_len) * s, sin(swing_angle) * (6 + extra_len * 3))
 			var trail_s = max(0, swing_progress - 0.3)
