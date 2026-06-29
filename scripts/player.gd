@@ -117,11 +117,12 @@ var stun_timer: float = 0.0
 var heal_charges: int = 3
 var max_heal_charges: int = 3
 var heal_amount: int = 20
-# Питьё зелья: длится ~3 сек, всё это время персонаж стоит и не атакует.
+# Питьё зелья: персонаж стоит и не атакует, ХП пополняется ПОСТЕПЕННО.
 var is_drinking: bool = false
 var drink_timer: float = 0.0
 var drink_heal_amount: int = 0
-const DRINK_TIME := 3.0
+var drink_given: int = 0          # сколько HP уже влито за это питьё
+const DRINK_TIME := 1.4           # пьётся быстрее
 
 # Blade upgrade (from chests)
 var has_blade: bool = false
@@ -875,16 +876,23 @@ func _physics_process(delta):
 		move_and_slide()
 		return
 
-	# Лечение-зелье: пьём ~3 сек, в это время нельзя двигаться/бить.
+	# Лечение-зелье: пьём, в это время нельзя двигаться/бить, ХП растёт плавно.
 	if is_drinking:
 		drink_timer -= delta
 		velocity.x = 0.0
 		velocity.y += gravity * delta
 		move_and_slide()
 		queue_redraw()
+		# Постепенное пополнение HP по мере питья.
+		if not is_dead:
+			var prog := 1.0 - clampf(drink_timer / DRINK_TIME, 0.0, 1.0)
+			var should_have := int(round(prog * drink_heal_amount))
+			if should_have > drink_given:
+				heal(should_have - drink_given)
+				drink_given = should_have
 		if drink_timer <= 0.0 or is_dead:
-			if not is_dead:
-				heal(drink_heal_amount)
+			if not is_dead and drink_given < drink_heal_amount:
+				heal(drink_heal_amount - drink_given)   # доливаем остаток
 			is_drinking = false
 			can_attack = true
 			weapon_pickup_msg = ""
@@ -1685,6 +1693,7 @@ func _start_drinking(amount: int) -> void:
 	is_drinking = true
 	drink_timer = DRINK_TIME
 	drink_heal_amount = amount
+	drink_given = 0
 	can_attack = false
 	velocity.x = 0.0
 	weapon_pickup_msg = "Пьёт зелье…"
