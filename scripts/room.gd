@@ -131,6 +131,7 @@ var _pf_rng: RandomNumberGenerator = null
 var _pf_lower_r: int = 0
 var _pf_diff: int = 1
 var _pf_tops: Array = []        # [{c0, c1, r}] площадки для лестниц/спавна
+var _arena_cols: Array = []     # [[c0, c1]] колонки боевых арен — там паркур-ловушек нет
 var poison_pipes: Array = []   # {x, y, dir, pool_w} — pipes with poison pools
 var pressure_plates: Array = [] # {x, y, triggered, cooldown} — arrow traps
 var trial_active: bool = false
@@ -1312,12 +1313,20 @@ func _add_spike_block(c: int, r: int) -> void:
 	grid[r][c] = 1
 	spike_blocks.append({"c": c, "r": r})
 
+func _in_arena_cols(c: int) -> bool:
+	for ac in _arena_cols:
+		if c >= ac[0] and c <= ac[1]:
+			return true
+	return false
+
 func _postprocess_platformer():
 	# Превращаем пещеру в платформенный вызов: парящие платформы для запрыгивания
 	# в высоких залах (чтобы карта не пустовала) + БЛОКИ ШИПОВ как ловушки и
 	# препятствия на полу/потолке/стенах. Шипы — тайловые, бьют при касании,
 	# их нужно обходить/перепрыгивать → больше манёвра и неудобства для игрока.
+	# Боевые арены не трогаем — там чистый бой. Плотность растёт с уровнем.
 	spike_blocks.clear()
+	var pf_diff: float = clampf(float(room_level - 1) / 8.0, 0.0, 1.0)
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 
@@ -1364,10 +1373,11 @@ func _postprocess_platformer():
 	#    залах (облететь). Никогда не перекрываем единственный узкий проход:
 	#    напольные имеют запас сверху, парящие окружены воздухом со всех сторон.
 	var sb_added := 0
+	var sb_max: int = 20 + int(pf_diff * 30.0)   # 20 → 50 блоков с глубиной
 	var c2 := 6
-	while c2 < grid_cols - 6 and sb_added < 45:
+	while c2 < grid_cols - 6 and sb_added < sb_max:
 		c2 += rng.randi_range(3, 6)
-		if absi(c2 - sx_tile) <= 5:
+		if absi(c2 - sx_tile) <= 5 or _in_arena_cols(c2):
 			continue
 		if rng.randf() < 0.5:
 			# На полу: твёрдый шип-блок на земле (есть куда перепрыгнуть).
@@ -1390,10 +1400,11 @@ func _postprocess_platformer():
 	#    пределах прыжка, под ним — яма с шипами на дне. Перепрыгни; упал —
 	#    вернёшься на безопасную точку (см. player.hazard_bounce).
 	var pits_added := 0
+	var pits_max: int = 3 + int(pf_diff * 6.0)   # 3 → 9 ям с глубиной
 	var c3 := 12
-	while c3 < grid_cols - 12 and pits_added < 8:
+	while c3 < grid_cols - 12 and pits_added < pits_max:
 		c3 += rng.randi_range(9, 16)
-		if absi(c3 - sx_tile) <= 8:
+		if absi(c3 - sx_tile) <= 8 or _in_arena_cols(c3):
 			continue
 		for rr in range(6, grid_rows - 6):
 			if grid[rr][c3] == 1 and grid[rr - 1][c3] == 0 and grid[rr - 2][c3] == 0:
@@ -1405,7 +1416,8 @@ func _postprocess_platformer():
 						flat = false
 						break
 				if flat:
-					var gapw: int = rng.randi_range(3, 4)   # в пределах прыжка
+					# Ширина ямы растёт со сложностью, но всегда в пределах прыжка.
+					var gapw: int = rng.randi_range(2 + int(pf_diff * 1.0), 3 + int(pf_diff * 1.0))
 					for dc in range(1, 1 + gapw):
 						grid[rr][c3 + dc] = 0
 						grid[rr + 1][c3 + dc] = 0
@@ -1430,6 +1442,7 @@ func _generate_cave():
 	spikes.clear()
 	poison_pipes.clear()
 	pressure_plates.clear()
+	_arena_cols.clear()
 
 	# Initialize grid — all solid; explored — все false
 	for r in grid_rows:
@@ -1495,6 +1508,9 @@ func _generate_cave():
 	_build_start_room(room_data[start_room_idx])
 
 	# === FILL ROOMS with content ===
+	# Сложность паркура растёт с уровнем: 0.0 (уровень 1) → 1.0 (уровень 9+).
+	# Влияет на ширину платформ, высоту шагов, плотность шипов, ширину ям.
+	var pf_diff: float = clampf(float(room_level - 1) / 8.0, 0.0, 1.0)
 	for i_rd in room_data.size():
 		if i_rd == start_room_idx:
 			continue  # start room has fixed layout
@@ -1504,7 +1520,9 @@ func _generate_cave():
 		var rw = rd.c_right - rd.c_left
 		var rh = rd.r_bot - rd.r_top
 
-		# Choose room type based on shape + randomness
+		# Choose room type based on shape + randomness.
+		# HK-баланс: чередуем БОЕВЫЕ арены (просторно, дерёшься) и ПАРКУР-комнаты
+		# (лезешь/прыгаешь). Упал в паркуре — внизу пол, поднимешься обратно.
 		var rtype: String
 		var roll = randf()
 		if rw <= 14 and rh >= 10:
@@ -1513,14 +1531,19 @@ func _generate_cave():
 			rtype = "shaft"
 		elif roll < 0.08 and i_rd != start_room_idx:
 			rtype = "treasury"
-		elif roll < 0.15 and i_rd != start_room_idx:
-			rtype = "training"
-		elif roll < 0.40:
+		elif roll < 0.15 + pf_diff * 0.12 and i_rd != start_room_idx:
+			rtype = "gauntlet"   # шипастый паркур-вызов (чаще на глубине)
+		elif roll < 0.42:
+			rtype = "arena"      # боевая комната — простор для драки
+		elif roll < 0.62:
 			rtype = "basement"
-		elif roll < 0.65:
+		elif roll < 0.80:
 			rtype = "ruins"
 		else:
 			rtype = "normal"
+		rd["rtype"] = rtype
+		if rtype == "arena":
+			_arena_cols.append([rd.c_left, rd.c_right])
 
 		# --- Wavy floor (all types except tower/shaft for cleaner jumps) ---
 		if rtype == "ruins" or rtype == "basement" or rtype == "normal":
@@ -1550,12 +1573,14 @@ func _generate_cave():
 		# --- Room-type specific content ---
 		match rtype:
 			"tower":
-				# Staggered zigzag platforms — jump up left/right alternating
-				var step = maxi(3, rh / 5)
+				# Staggered zigzag platforms — jump up left/right alternating.
+				# Сложность: выше шаг, уже платформы (но всегда в пределах прыжка,
+				# а one-way позволяет запрыгивать снизу — упал → лезешь обратно).
+				var step = clampi(maxi(3, rh / 5) + (1 if pf_diff > 0.5 else 0), 3, 4)
 				var from_left = true
 				var pr = rd.r_bot - 2
 				while pr > rd.r_top + 3:
-					var pw = randi_range(rw / 3, rw * 2 / 3)
+					var pw = randi_range(maxi(3, rw / 3 - int(pf_diff * 3.0)), rw * 2 / 3)
 					pw = mini(pw, rw - 3)
 					var pc = rd.c_left + 2 if from_left else rd.c_right - pw - 2
 					pc = clampi(pc, rd.c_left + 1, rd.c_right - pw - 1)
@@ -1657,12 +1682,13 @@ func _generate_cave():
 					})
 
 			"shaft":
-				# Alternating ledges from walls — zigzag path upward
-				var step2 = maxi(2, rh / 7)
+				# Alternating ledges from walls — zigzag path upward.
+				# Сложность сужает уступы и поднимает шаг (в пределах прыжка).
+				var step2 = clampi(maxi(2, rh / 7) + (1 if pf_diff > 0.4 else 0), 2, 4)
 				var from_left2 = true
 				var pr4 = rd.r_bot - 2
 				while pr4 > rd.r_top + 3:
-					var lw = randi_range(rw / 3, rw * 2 / 3)
+					var lw = randi_range(maxi(3, rw / 3 - int(pf_diff * 4.0)), rw * 2 / 3)
 					lw = mini(lw, rw - 3)
 					var lc = rd.c_left + 1 if from_left2 else rd.c_right - lw
 					lc = clampi(lc, rd.c_left + 1, rd.c_right - lw)
@@ -1695,6 +1721,62 @@ func _generate_cave():
 					var pc_t = randi_range(rd.c_left + 1, maxi(rd.c_left + 2, rd.c_right - pw_t))
 					oneway_platforms.append({"x": float(pc_t * tile_size), "y": float(pr_t * tile_size),
 						"w": float(pw_t * tile_size), "r": pr_t, "c": pc_t, "tw": pw_t})
+
+			"arena":
+				# БОЕВАЯ АРЕНА: ровный чистый пол, простор для драки, 1-2 низкие
+				# платформы для манёвра (запрыгнуть/спрыгнуть за спину врагу).
+				# Никаких случайных шипов — бой должен быть честным.
+				var ap_count = randi_range(1, 2)
+				for _ap in ap_count:
+					var apw = randi_range(5, 8)
+					var apc = randi_range(rd.c_left + 2, maxi(rd.c_left + 3, rd.c_right - apw - 2))
+					var apr = rd.r_bot - randi_range(3, 4)
+					oneway_platforms.append({
+						"x": float(apc * tile_size), "y": float(apr * tile_size),
+						"w": float(apw * tile_size), "r": apr, "c": apc, "tw": apw,
+					})
+				# Боковые уступы у стен — точки для отступления
+				for _ae in 2:
+					var ae_left = _ae == 0
+					var aer = rd.r_bot - randi_range(4, 6)
+					for dc3 in 3:
+						var aec = (rd.c_left + dc3) if ae_left else (rd.c_right - dc3)
+						if aec >= rd.c_left and aec <= rd.c_right:
+							grid[aer][aec] = 1
+
+			"gauntlet":
+				# ПАРКУР-ВЫЗОВ (Hollow Knight): дно комнаты — ШИПЫ во всю ширину,
+				# через них — дорожка из камней-ступеней (one-way платформы).
+				# Ширина камней и разрывы зависят от сложности уровня. Упал —
+				# hazard_bounce вернёт на последнюю безопасную точку. В конце
+				# дорожки — сундук-награда.
+				var sp_y = rd.r_bot + 1
+				spikes.append({
+					"x": float((rd.c_left + 1) * tile_size),
+					"y": float(sp_y * tile_size),
+					"w": float((rw - 2) * tile_size),
+				})
+				# Камни-ступени: чем глубже, тем уже камни и шире разрывы.
+				var stone_w: int = 3 - int(round(pf_diff))            # 3 → 2
+				var gap_w: int = 2 + int(round(pf_diff * 2.0))        # 2 → 4
+				var path_row: int = rd.r_bot - 2
+				var gc: int = rd.c_left + 1
+				var height_flip := false
+				while gc < rd.c_right - stone_w - 1:
+					# Высота ступеней слегка гуляет — прыжки не монотонные
+					var srow: int = path_row - (2 if height_flip and pf_diff > 0.35 else 0)
+					height_flip = not height_flip
+					oneway_platforms.append({
+						"x": float(gc * tile_size), "y": float(srow * tile_size),
+						"w": float(stone_w * tile_size), "r": srow, "c": gc, "tw": stone_w,
+					})
+					gc += stone_w + gap_w
+				# Твёрдые площадки входа/выхода по краям (безопасные зоны)
+				for dc4 in 3:
+					grid[rd.r_bot][rd.c_left + dc4] = 1
+					grid[rd.r_bot][rd.c_right - dc4] = 1
+				# Награда за прохождение — сундук на дальней стороне
+				_place_chest(float((rd.c_right - 1) * tile_size), float((rd.r_bot - 1) * tile_size))
 
 			"training":
 				# Wooden dummy pillars + practice platforms, no traps
@@ -1760,9 +1842,13 @@ func _generate_cave():
 						"w": float(pw4 * tile_size), "r": pr6, "c": pc5, "tw": pw4,
 					})
 
-		# --- Traps (all room types) ---
+		# --- Traps ---
+		# Арена — чистая (честный бой), гонтлет сам себе ловушка.
+		if rtype == "arena" or rtype == "gauntlet":
+			continue
 		if rw > 6:
-			for _si in randi_range(3, 7):
+			# Плотность шипов растёт со сложностью уровня.
+			for _si in randi_range(2 + int(pf_diff * 2.0), 5 + int(pf_diff * 4.0)):
 				var spike_c = randi_range(rd.c_left + 1, rd.c_right - 3)
 				var spike_w = randi_range(2, 3)
 				var overlap = false
@@ -1901,7 +1987,10 @@ func _generate_cave():
 			continue
 		if i == start_idx or i == door_idx:
 			continue
-		var cave_type = "normal"
+		# Комнаты-паркур (gauntlet/tower/shaft) помечаем отдельно: враги там НЕ
+		# спавнятся — паркур остаётся паркуром, бои идут в аренах и обычных залах.
+		var rt: String = rd.get("rtype", "normal")
+		var cave_type = "parkour" if rt in ["gauntlet", "tower", "shaft"] else "normal"
 		caves.append({
 			"x": float((rd.c_left + rd.c_right) / 2 * tile_size),
 			"y": float(rd.r_top * tile_size),
@@ -2809,8 +2898,11 @@ func _find_clear_floor(px: float, py_hint: float, headroom: int = 2) -> Vector2:
 	return Vector2(INF, INF)
 
 func _get_spawn_position() -> Vector2:
-	# Pick a random non-start cave, verify position is reachable
-	var spawn_caves = caves.filter(func(c): return c.type != "start" and c.type != "chest")
+	# Pick a random non-start cave, verify position is reachable.
+	# Паркур-комнаты исключаем: враги живут в аренах и обычных залах.
+	var spawn_caves = caves.filter(func(c): return c.type != "start" and c.type != "chest" and c.type != "parkour")
+	if spawn_caves.size() == 0:
+		spawn_caves = caves.filter(func(c): return c.type != "start" and c.type != "chest")
 	if spawn_caves.size() == 0:
 		spawn_caves = caves.filter(func(c): return c.type != "start")
 	if spawn_caves.size() == 0:
