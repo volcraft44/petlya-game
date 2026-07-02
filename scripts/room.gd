@@ -1503,8 +1503,65 @@ func _generate_cave():
 			if c >= 0 and c < grid_cols and rd.r_bot + 1 < grid_rows:
 				grid[rd.r_bot + 1][c] = 1
 
-	# === BUILD FIXED START ROOM (bottom-left) ===
+	# === КРИТИЧЕСКИЙ ПУТЬ (Hollow Knight-режиссура) ===
+	# BFS от старта по активным комнатам. Дверь — в самой ДАЛЬНЕЙ комнате.
+	# Путь к ней размечаем и режиссируем: бой → паркур → привал → паркур →
+	# страж у двери. Тупики вне пути — сокровищницы (риск ради награды).
 	var start_room_idx = (rooms_y - 1) * rooms_x + 0
+	var bfs_prev := {}
+	var bfs_dist := {start_room_idx: 0}
+	var bfs_q := [start_room_idx]
+	while bfs_q.size() > 0:
+		var cur: int = bfs_q.pop_front()
+		var crx: int = cur % rooms_x
+		var cry: int = int(cur / float(rooms_x))
+		for dxy in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+			var nrx: int = crx + dxy[0]
+			var nry: int = cry + dxy[1]
+			if nrx < 0 or nrx >= rooms_x or nry < 0 or nry >= rooms_y:
+				continue
+			var nidx: int = nry * rooms_x + nrx
+			if not room_data[nidx].active or bfs_dist.has(nidx):
+				continue
+			bfs_dist[nidx] = bfs_dist[cur] + 1
+			bfs_prev[nidx] = cur
+			bfs_q.append(nidx)
+	var door_room_idx: int = start_room_idx
+	var best_bfs_d: int = -1
+	for k in bfs_dist:
+		if bfs_dist[k] > best_bfs_d:
+			best_bfs_d = bfs_dist[k]
+			door_room_idx = k
+	# Восстанавливаем путь старт→дверь и помечаем комнаты.
+	var path_rooms: Array = []
+	var walk: int = door_room_idx
+	while true:
+		path_rooms.push_front(walk)
+		if walk == start_room_idx:
+			break
+		walk = bfs_prev[walk]
+	for i2 in room_data.size():
+		room_data[i2]["on_path"] = false
+		room_data[i2]["path_pos"] = -1
+		room_data[i2]["is_door_room"] = false
+	for pi in path_rooms.size():
+		room_data[path_rooms[pi]]["on_path"] = true
+		room_data[path_rooms[pi]]["path_pos"] = pi
+	room_data[door_room_idx]["is_door_room"] = true
+	# Тупики вне пути (одна дверь) — будущие сокровищницы.
+	for i3 in room_data.size():
+		var rd3 = room_data[i3]
+		var nbr: int = 0
+		if rd3.active:
+			for dxy2 in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+				var ax: int = rd3.rx + dxy2[0]
+				var ay: int = rd3.ry + dxy2[1]
+				if ax >= 0 and ax < rooms_x and ay >= 0 and ay < rooms_y:
+					if room_data[ay * rooms_x + ax].active:
+						nbr += 1
+		rd3["is_deadend"] = rd3.active and nbr <= 1 and not rd3["on_path"]
+
+	# === BUILD FIXED START ROOM (bottom-left) ===
 	_build_start_room(room_data[start_room_idx])
 
 	# === FILL ROOMS with content ===
@@ -1520,29 +1577,58 @@ func _generate_cave():
 		var rw = rd.c_right - rd.c_left
 		var rh = rd.r_bot - rd.r_top
 
-		# Choose room type based on shape + randomness.
-		# HK-баланс: чередуем БОЕВЫЕ арены (просторно, дерёшься) и ПАРКУР-комнаты
-		# (лезешь/прыгаешь). Упал в паркуре — внизу пол, поднимешься обратно.
+		# === РЕЖИССУРА ТИПА КОМНАТЫ (Hollow Knight) ===
+		# Комнаты НА критическом пути следуют ритму: бой → паркур → бой → ...,
+		# ровно в середине — ПРИВАЛ (безопасно + зелье), предпоследняя — серьёзный
+		# паркур, комната ДВЕРИ — арена «стража» (финальный бой уровня).
+		# Тупики вне пути — сокровищницы. Остальное — атмосферные залы.
 		var rtype: String
-		var roll = randf()
-		if rw <= 14 and rh >= 10:
-			rtype = "tower"
-		elif rw >= 20 and rh >= 12:
-			rtype = "shaft"
-		elif roll < 0.08 and i_rd != start_room_idx:
-			rtype = "treasury"
-		elif roll < 0.15 + pf_diff * 0.12 and i_rd != start_room_idx:
-			rtype = "gauntlet"   # шипастый паркур-вызов (чаще на глубине)
-		elif roll < 0.42:
-			rtype = "arena"      # боевая комната — простор для драки
-		elif roll < 0.62:
-			rtype = "basement"
-		elif roll < 0.80:
-			rtype = "ruins"
+		var ppos: int = rd.get("path_pos", -1)
+		var plen: int = path_rooms.size()
+		if rd.get("is_door_room", false):
+			rtype = "arena"                     # страж у выхода
+		elif ppos > 0:
+			if plen >= 5 and ppos == int(plen / 2.0):
+				rtype = "rest"                  # привал в середине пути
+			elif ppos == plen - 2 and plen >= 3:
+				# Предпоследняя — сложный паркур перед стражем
+				if rw <= 14 and rh >= 10:
+					rtype = "tower"
+				elif rh >= 10:
+					rtype = "shaft"
+				else:
+					rtype = "gauntlet"
+			elif ppos % 2 == 1:
+				# Нечётные шаги пути — БОЙ (арена или мост над пропастью)
+				rtype = "bridge" if rw >= 18 and randf() < 0.5 else "arena"
+			else:
+				# Чётные шаги — ПАРКУР
+				if rw <= 14 and rh >= 10:
+					rtype = "tower"
+				elif rw >= 20 and rh >= 12:
+					rtype = "shaft"
+				else:
+					rtype = "gauntlet" if randf() < 0.45 + pf_diff * 0.25 else "ruins"
+		elif rd.get("is_deadend", false):
+			rtype = "treasury"                  # тупик = сокровищница
 		else:
-			rtype = "normal"
+			var roll2 = randf()
+			if rw <= 14 and rh >= 10:
+				rtype = "tower"
+			elif rw >= 20 and rh >= 12:
+				rtype = "shaft"
+			elif roll2 < 0.30:
+				rtype = "arena"
+			elif roll2 < 0.55:
+				rtype = "basement"
+			elif roll2 < 0.80:
+				rtype = "ruins"
+			else:
+				rtype = "normal"
 		rd["rtype"] = rtype
-		if rtype == "arena":
+		# Безопасные зоны для пост-обработки: арены (чистый бой), привал,
+		# мосты (яму под мостом нельзя дырявить паркур-ямами).
+		if rtype in ["arena", "rest", "bridge"]:
 			_arena_cols.append([rd.c_left, rd.c_right])
 
 		# --- Wavy floor (all types except tower/shaft for cleaner jumps) ---
@@ -1778,6 +1864,53 @@ func _generate_cave():
 				# Награда за прохождение — сундук на дальней стороне
 				_place_chest(float((rd.c_right - 1) * tile_size), float((rd.r_bot - 1) * tile_size))
 
+			"bridge":
+				# МОСТ НАД ПРОПАСТЬЮ: внизу шипы во всю ширину, поперёк — узкий
+				# мост с разрывами. Бой идёт НА мосту: тесно, сорваться легко,
+				# но hazard_bounce вернёт на безопасную точку. Самые напряжённые
+				# драки уровня.
+				spikes.append({
+					"x": float((rd.c_left + 2) * tile_size),
+					"y": float((rd.r_bot + 1) * tile_size),
+					"w": float((rw - 3) * tile_size),
+				})
+				var br_row: int = rd.r_bot - 3
+				# Мост целиком...
+				for bc in range(rd.c_left, rd.c_right + 1):
+					grid[br_row][bc] = 1
+				# ...затем вырезаем разрывы (глубже — больше и шире)
+				var bgaps: int = 1 + int(round(pf_diff))
+				var bgap_w: int = 2 + int(pf_diff * 1.0)
+				for g in bgaps:
+					var g0: int = rd.c_left + int(rw * (g + 1) / float(bgaps + 1)) - int(bgap_w / 2.0)
+					for dc5 in bgap_w:
+						var gcx: int = g0 + dc5
+						if gcx > rd.c_left + 2 and gcx < rd.c_right - 2:
+							grid[br_row][gcx] = 0
+				# Ступени-колонны по краям ямы: упал — за два прыжка вернулся
+				# на мост (шипы у краёв не достают до колонн).
+				grid[rd.r_bot][rd.c_left + 1] = 1
+				grid[rd.r_bot - 1][rd.c_left + 1] = 1
+				grid[rd.r_bot][rd.c_right - 1] = 1
+				grid[rd.r_bot - 1][rd.c_right - 1] = 1
+				# Спавн врагов этой комнаты — на мосту, а не в яме с шипами.
+				rd["cave_floor_r"] = br_row
+
+			"rest":
+				# ПРИВАЛ: безопасная комната в середине пути. Врагов нет,
+				# гарантированное зелье в сундуке — передышка перед второй
+				# половиной уровня.
+				_place_chest(float(int((rd.c_left + rd.c_right) / 2.0) * tile_size),
+					float((rd.r_bot - 1) * tile_size), false, true)
+				for _re in 2:
+					var rer: int = rd.r_bot - 3 - _re * 3
+					var rec: int = rd.c_left + 3 + _re * 5
+					if rec + 5 < rd.c_right:
+						oneway_platforms.append({
+							"x": float(rec * tile_size), "y": float(rer * tile_size),
+							"w": float(5 * tile_size), "r": rer, "c": rec, "tw": 5,
+						})
+
 			"training":
 				# Wooden dummy pillars + practice platforms, no traps
 				for _td in randi_range(2, 3):
@@ -1843,8 +1976,8 @@ func _generate_cave():
 					})
 
 		# --- Traps ---
-		# Арена — чистая (честный бой), гонтлет сам себе ловушка.
-		if rtype == "arena" or rtype == "gauntlet":
+		# Арена/привал — чистые, гонтлет и мост сами себе ловушка.
+		if rtype in ["arena", "gauntlet", "rest", "bridge"]:
 			continue
 		if rw > 6:
 			# Плотность шипов растёт со сложностью уровня.
@@ -1897,7 +2030,12 @@ func _generate_cave():
 			var right_idx = ry * rooms_x + rx + 1
 			if not room_data[right_idx].active:
 				continue
-			if randf() < 0.85 or ry == rooms_y - 1 or ry == 0:
+			# Соседние комнаты критического пути соединяем ВСЕГДА — путь к двери
+			# гарантирован без обходов.
+			var rr_d = room_data[right_idx]
+			var path_pair: bool = rd["on_path"] and rr_d["on_path"] \
+				and absi(int(rd["path_pos"]) - int(rr_d["path_pos"])) == 1
+			if path_pair or randf() < 0.85 or ry == rooms_y - 1 or ry == 0:
 				var right_rd = room_data[right_idx]
 				var open_r = rd.r_bot - randi_range(0, 1)
 				var open_h = randi_range(4, 5)
@@ -1922,7 +2060,10 @@ func _generate_cave():
 			var below_idx = (ry + 1) * rooms_x + rx
 			if not room_data[below_idx].active:
 				continue
-			if randf() < 0.65 or rx == 0 or rx == rooms_x - 1:
+			var bl_d = room_data[below_idx]
+			var vpath_pair: bool = rd["on_path"] and bl_d["on_path"] \
+				and absi(int(rd["path_pos"]) - int(bl_d["path_pos"])) == 1
+			if vpath_pair or randf() < 0.65 or rx == 0 or rx == rooms_x - 1:
 				var below_rd = room_data[below_idx]
 				var open_c = randi_range(rd.c_left + 2, maxi(rd.c_left + 3, rd.c_right - 5))
 				var open_w = randi_range(3, 4)
@@ -1953,23 +2094,9 @@ func _generate_cave():
 		"floor_y": float(start_rd.r_bot * tile_size)
 	})
 
-	# Pick a random room for the door (not the start room, far enough away)
+	# Дверь — СТРОГО в конце критического пути (самая дальняя комната от старта).
 	var start_idx = (rooms_y - 1) * rooms_x + 0
-	var door_candidates: Array = []
-	for i in room_data.size():
-		if i == start_idx or not room_data[i].active:
-			continue
-		# Must be at least 2 rooms away from start (manhattan distance)
-		var dx = absi(room_data[i].rx - room_data[start_idx].rx)
-		var dy = absi(room_data[i].ry - room_data[start_idx].ry)
-		if dx + dy >= 3:
-			door_candidates.append(i)
-	var door_idx = start_idx  # fallback
-	if door_candidates.size() > 0:
-		door_idx = door_candidates[randi() % door_candidates.size()]
-	else:
-		# fallback: top-right
-		door_idx = 0 * rooms_x + rooms_x - 1
+	var door_idx = door_room_idx
 	var door_rd = room_data[door_idx]
 	caves.append({
 		"x": float((door_rd.c_left + door_rd.c_right) / 2 * tile_size),
@@ -1977,6 +2104,16 @@ func _generate_cave():
 		"w": float((door_rd.c_right - door_rd.c_left) * tile_size),
 		"h": float((door_rd.r_bot - door_rd.r_top) * tile_size),
 		"type": "door",
+		"floor_y": float(door_rd.r_bot * tile_size)
+	})
+	# Комната двери — арена «стража»: добавляем её и как боевую пещеру, чтобы
+	# у выхода игрока ждал финальный бой уровня.
+	caves.append({
+		"x": float((door_rd.c_left + door_rd.c_right) / 2 * tile_size),
+		"y": float(door_rd.r_top * tile_size),
+		"w": float((door_rd.c_right - door_rd.c_left) * tile_size),
+		"h": float((door_rd.r_bot - door_rd.r_top) * tile_size),
+		"type": "normal",
 		"floor_y": float(door_rd.r_bot * tile_size)
 	})
 
@@ -1988,17 +2125,27 @@ func _generate_cave():
 		if i == start_idx or i == door_idx:
 			continue
 		# Комнаты-паркур (gauntlet/tower/shaft) помечаем отдельно: враги там НЕ
-		# спавнятся — паркур остаётся паркуром, бои идут в аренах и обычных залах.
+		# спавнятся — паркур остаётся паркуром. Привал — безопасная зона.
+		# На мосту спавним на УРОВНЕ МОСТА (не в яме с шипами).
 		var rt: String = rd.get("rtype", "normal")
-		var cave_type = "parkour" if rt in ["gauntlet", "tower", "shaft"] else "normal"
-		caves.append({
+		var cave_type = "normal"
+		if rt in ["gauntlet", "tower", "shaft"]:
+			cave_type = "parkour"
+		elif rt == "rest":
+			cave_type = "rest"
+		var cave_fr: int = rd.get("cave_floor_r", rd.r_bot)
+		var cave_dict := {
 			"x": float((rd.c_left + rd.c_right) / 2 * tile_size),
 			"y": float(rd.r_top * tile_size),
 			"w": float((rd.c_right - rd.c_left) * tile_size),
 			"h": float((rd.r_bot - rd.r_top) * tile_size),
 			"type": cave_type,
-			"floor_y": float(rd.r_bot * tile_size)
-		})
+			"floor_y": float(cave_fr * tile_size)
+		}
+		caves.append(cave_dict)
+		# Арены и мосты — очаги боёв: двойной вес при выборе точек спавна.
+		if rt in ["arena", "bridge"]:
+			caves.append(cave_dict.duplicate())
 
 	# === CHESTS (in some rooms) ===
 	var chest_count = 0
@@ -2500,7 +2647,7 @@ func _add_wall(pos: Vector2, size: Vector2):
 
 	add_child(wall)
 
-func _place_chest(cx: float, cy: float, force_weapon: bool = false):
+func _place_chest(cx: float, cy: float, force_weapon: bool = false, force_heal: bool = false):
 	# Сундук ставим на РОВНЫЙ пол со свободным местом, чтобы он не оказался
 	# вмурован в стену/текстуру. Основание сундука ~ на 6px ниже его центра.
 	var cpos = _find_clear_floor(cx, cy, 2)
@@ -2526,6 +2673,8 @@ func _place_chest(cx: float, cy: float, force_weapon: bool = false):
 		weapon_id = uncommon[randi() % uncommon.size()]
 	else:  # 50% heal
 		weapon_id = -1
+	if force_heal:
+		weapon_id = -1   # гарантированное зелье (сундук привала)
 	chests.append({"x": cx, "y": cy, "opened": false, "weapon_id": weapon_id})
 
 	var chest_area = Area2D.new()
@@ -2899,8 +3048,8 @@ func _find_clear_floor(px: float, py_hint: float, headroom: int = 2) -> Vector2:
 
 func _get_spawn_position() -> Vector2:
 	# Pick a random non-start cave, verify position is reachable.
-	# Паркур-комнаты исключаем: враги живут в аренах и обычных залах.
-	var spawn_caves = caves.filter(func(c): return c.type != "start" and c.type != "chest" and c.type != "parkour")
+	# Паркур и привал исключаем: враги живут в аренах, залах и на мостах.
+	var spawn_caves = caves.filter(func(c): return not (c.type in ["start", "chest", "parkour", "rest"]))
 	if spawn_caves.size() == 0:
 		spawn_caves = caves.filter(func(c): return c.type != "start" and c.type != "chest")
 	if spawn_caves.size() == 0:
