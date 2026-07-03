@@ -2884,20 +2884,39 @@ func _spawn_enemies(enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 		var enemy = enemy_scene.instantiate()
 
 		# Weaker per enemy: ~half HP, ~2/3 damage vs old formula
-		var hp = (1 + room_level) * 10
-		var spd = 30.0 + room_level * 3
-		var dmg = 10 + room_level * 2
-		dmg = mini(dmg, 30)  # Cap at 30 — never one-shot player
-		if eclass == 3:   # SHIELDMAN
-			hp += 20
-		elif eclass == 7: # SPIDER — fast but moderate HP
-			hp = int(hp * 0.9)
-		elif eclass == 14:  # KNIGHT — setup_class handles its own HP/dmg, pass 0
-			hp = 0; dmg = 0  # _setup_class() overrides these for KNIGHT
-		elif eclass == 16:  # DOG — setup_class handles its own HP/dmg
-			hp = 0; dmg = 0
-		elif eclass == 17:  # BRUTE — тяжёлый громила, свои HP/урон/стан
-			hp = 0; dmg = 0
+		# === ТИРЫ СЛОЖНОСТИ (Dead Cells): читаемый баланс ===
+		# РОЙ  — умирает с 1 удара, кусает мелко, берёт числом.
+		# СТРЕЛКИ — хрупкие (2 удара), опасны на дистанции: сближайся.
+		# СТАНДАРТ — 3 удара, честный телеграфный бой.
+		# ТЯЖЁЛЫЕ — 5-6 ударов, стойкость, станящие удары: уворачивайся.
+		var base_hp: float = 40.0 + room_level * 8.0
+		var hp: int
+		var dmg: int
+		var spd: float = 30.0 + room_level * 2.0
+		match eclass:
+			9, 11:            # RAT, BEETLE — рой
+				hp = int(base_hp * 0.22); dmg = 8 + room_level
+			4, 12:            # FLY, MOSQUITO — летающий рой
+				hp = int(base_hp * 0.30); dmg = 6 + room_level
+			0, 1, 2:          # ARCHER, CROSSBOW, THROWER — стрелки
+				hp = int(base_hp * 0.85); dmg = 9 + room_level * 2
+			6:                # MAGE — хрупкий, телепорты
+				hp = int(base_hp * 0.70); dmg = 8 + room_level
+			5, 7, 13, 15:     # STEALTH, SPIDER, ZOMBIE, HERETIC — стандарт
+				hp = int(base_hp * 1.5); dmg = 11 + room_level * 2
+			8:                # SUMMONER — важно убить быстро
+				hp = int(base_hp * 1.1); dmg = 5
+			3, 10:            # SHIELDMAN, MUMMY — тяжёлые
+				hp = int(base_hp * 2.6); dmg = 15 + room_level * 2
+			16:               # DOG — быстрый охотник
+				hp = int(base_hp * 1.3); dmg = 14 + room_level
+			14:               # KNIGHT — элита с парированием
+				hp = int(base_hp * 2.4); dmg = 24 + room_level
+			17:               # BRUTE — громила: медленный, станящий, толстый
+				hp = int(base_hp * 3.0); dmg = 28 + room_level
+			_:
+				hp = int(base_hp); dmg = 10 + room_level * 2
+		dmg = mini(dmg, 38)  # никогда не ваншотит игрока
 
 		enemy.setup(eclass, hp, spd, dmg)
 		enemy.player = p_player_ref
@@ -2940,8 +2959,9 @@ func _spawn_enemies(enemy_scene: PackedScene, p_player_ref: CharacterBody2D):
 
 func _spawn_heretic_group(p_player_ref: CharacterBody2D):
 	var enemy_gd = load("res://scripts/enemy.gd")
-	var hp  = (1 + room_level) * 10
-	var spd = 30.0 + room_level * 3
+	# Стая из 5 — каждый чуть легче одиночного стандарта (умирает за ~2 удара).
+	var hp  = int((40.0 + room_level * 8.0) * 0.9)
+	var spd = 42.0 + room_level * 2
 	var dmg = mini(10 + room_level * 2, 30)
 	var base_pos = _get_spawn_position()
 	var group: Array = []
@@ -3610,9 +3630,11 @@ func _spawn_single_enemy(x: float, y: float):
 	var enemy = _enemy_scene_ref.instantiate()
 	var classes = [0, 1, 2, 3]
 	var eclass = classes[randi() % classes.size()]
-	var hp = (1 + room_level) * 12
-	var spd = 30.0 + room_level * 3
-	var dmg = 10 + room_level * 2
+	# Тиры как в основном спавне: стрелки хрупкие, щитоносец тяжёлый.
+	var base_hp: float = 40.0 + room_level * 8.0
+	var hp: int = int(base_hp * (2.6 if eclass == 3 else 0.85))
+	var spd = 30.0 + room_level * 2
+	var dmg = mini(9 + room_level * 2, 34)
 	enemy.setup(eclass, hp, spd, dmg)
 	enemy.player = player_ref
 	# Привязываем к РОВНОМУ полу со свободным местом (не в стене/потолке).

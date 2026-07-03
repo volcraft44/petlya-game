@@ -18,6 +18,18 @@ const ANIMATED_CLASSES := [EnemyClass.FLY, EnemyClass.STEALTH, EnemyClass.MAGE,
 var stuns_on_hit: bool = false
 var stun_power: float = 0.0
 
+# === Dead Cells-цикл ближнего боя: ЗАМАХ → УДАР → восстановление ===
+# Урон прилетает ПОСЛЕ телеграфа — у игрока есть окно, чтобы уйти/увернуться.
+var pending_melee: bool = false
+var pending_melee_timer: float = 0.0
+# Флинч и стойкость: лёгкие враги вздрагивают от каждого удара (замах сбивается),
+# тяжёлые держат poise ударов прежде чем вздрогнуть.
+var flinch_timer: float = 0.0
+var poise: int = 0
+var poise_counter: int = 0
+# Дети призывателя (лимит, чтобы не лагало)
+var summoner_children: Array = []
+
 @export var enemy_class: int = EnemyClass.SHIELDMAN
 @export var speed: float = 35.0
 @export var max_health: int = 3
@@ -290,21 +302,30 @@ func _ready():
 	if enemy_class == EnemyClass.SHIELDMAN:
 		hurt_area.body_entered.connect(_on_touch_player)
 
-	_setup_class()
+	# ВАЖНО: если setup() уже отработал (спавн из комнаты идёт setup→add_child),
+	# НЕ вызываем _setup_class повторно — иначе дефолты класса ПЕРЕТРУТ
+	# тировые HP/урон, заданные комнатой (старый баг «то легко, то невозможно»).
+	if not _setup_done:
+		_setup_class()
 
 	# Load sprite animations for all enemy types
 	_load_enemy_sprites()
 
+var _setup_done: bool = false
+
 func setup(p_class: int, p_health: int, p_speed: float, p_damage: int):
 	enemy_class = p_class
-	# hp=0 / dmg=0 means "use _setup_class() defaults" (e.g. KNIGHT, DOG)
+	# СНАЧАЛА дефолты класса, ПОТОМ переданные значения — комната полностью
+	# управляет балансом HP/урона (тиры сложности), а не дефолты класса.
+	_setup_class()
 	if p_health > 0:
 		max_health = p_health
 		health = max_health
 	if p_damage > 0:
 		damage = p_damage
-	speed = p_speed
-	_setup_class()
+	if p_speed > 0.0:
+		speed = p_speed
+	_setup_done = true
 
 func make_elite(affix: String) -> void:
 	# Превращает врага в элитного — баффы зависят от аффикса.
@@ -492,7 +513,31 @@ func _setup_class():
 			stuns_on_hit = true
 			stun_power = 0.4
 
+	# СТОЙКОСТЬ (poise): сколько ударов враг держит, не вздрагивая.
+	# 0 = вздрагивает от каждого удара (и замах сбивается) — лёгкие враги.
+	# Тяжёлые продавливают атаку сквозь пару ударов — их надо уважать.
+	match enemy_class:
+		EnemyClass.SHIELDMAN, EnemyClass.MUMMY:
+			poise = 2
+		EnemyClass.KNIGHT, EnemyClass.BRUTE:
+			poise = 3
+		EnemyClass.ZOMBIE_CORPSE, EnemyClass.DOG:
+			poise = 1
+		_:
+			poise = 0
+
 func _process(delta):
+	# === ЗАМАХ → УДАР (Dead Cells) ===
+	# Урон прилетает ПОСЛЕ телеграфа. Стан/заморозка сбивают замах.
+	if pending_melee:
+		pending_melee_timer -= delta
+		queue_redraw()
+		if is_stunned or frozen_timer > 0.0:
+			pending_melee = false
+		elif pending_melee_timer <= 0.0:
+			pending_melee = false
+			_strike_melee()
+
 	# Stun timer
 	if is_stunned:
 		stun_timer -= delta
@@ -666,6 +711,20 @@ func _physics_process(delta):
 			if contact_cd <= 0.0:
 				contact_cd = 0.7
 				player.take_damage(maxi(1, int(damage * 0.5)), push)
+
+	# === ФЛИНЧ: враг вздрогнул от удара — короткая пауза (окно для комбо) ===
+	if flinch_timer > 0.0:
+		flinch_timer -= delta
+		velocity.x = knockback_velocity.x
+		knockback_velocity *= 0.85
+		move_and_slide()
+		return
+
+	# === ЗАМАХ: стоим на месте — телеграф честный, игрок успевает уйти ===
+	if pending_melee:
+		velocity.x = move_toward(velocity.x, 0.0, 600.0 * delta)
+		move_and_slide()
+		return
 
 	# === ELITE поведение ===
 	if elite_affix != "":
@@ -1346,32 +1405,52 @@ func flash_white():
 	queue_redraw()
 
 func _melee_attack():
-	# Тяжёлые/станящие враги бьют с заметным замахом (долгий удар).
-	var tele: float = 0.5 if stuns_on_hit else 0.2
+	# Dead Cells-цикл: ЗАМАХ (читаемый телеграф — можно уйти/увернуться или
+	# сбить лёгкому врагу) → УДАР (урон прилетает ТОЛЬКО после замаха) →
+	# восстановление (кулдаун). Никакого мгновенного урона.
+	var tele: float = 0.28
+	if stuns_on_hit:
+		tele = 0.5      # тяжёлые замахиваются дольше — читается издалека
+	elif enemy_class == EnemyClass.ZOMBIE_CORPSE:
+		tele = 0.38
+	elif enemy_class == EnemyClass.RAT or enemy_class == EnemyClass.BEETLE:
+		tele = 0.16     # рой кусает быстро, но и умирает с одного удара
 	telegraph_timer = tele
 	telegraph_duration = tele
 	can_attack = false
 	attack_timer = attack_cooldown
-	is_attacking_melee = true
-	melee_anim_timer = maxf(0.25, tele)
+	pending_melee = true
+	pending_melee_timer = tele
 
-	if player and is_instance_valid(player):
-		var dist = global_position.distance_to(player.global_position)
-		if dist < attack_range + 10:
-			# Parry check — player blocked at just the right moment
-			if player.has_method("is_parrying") and player.is_parrying():
-				is_stunned = true
-				stun_timer = 2.5
-				knockback_velocity = (global_position - player.global_position).normalized() * 220
-				knockback_velocity.y = -160
-				if player.has_method("trigger_parry_flash"):
-					player.trigger_parry_flash()
-				return
-			var dir = (player.global_position - global_position).normalized()
-			player.take_damage(damage, dir)
-			# Оглушаем игрока, если это станящий враг.
-			if stuns_on_hit and not player.is_dead and player.has_method("stun"):
-				player.stun(stun_power)
+func _strike_melee():
+	# Момент удара — после замаха. Игрок мог уйти: проверяем дистанцию заново.
+	is_attacking_melee = true
+	melee_anim_timer = 0.22
+	if not (player and is_instance_valid(player)):
+		return
+	var dist = global_position.distance_to(player.global_position)
+	var dirp = (player.global_position - global_position).normalized()
+	# Рывок вперёд в момент удара — атака живая, а не «стоит и тыкает»
+	velocity.x = dirp.x * 110.0
+	if dist >= attack_range + 14.0:
+		return   # игрок УСПЕЛ отойти — удар в пустоту
+	# Парирование: точный блок в момент удара оглушает врага
+	if player.has_method("is_parrying") and player.is_parrying():
+		is_stunned = true
+		stun_timer = 2.5
+		knockback_velocity = -dirp * 220
+		knockback_velocity.y = -160
+		if player.has_method("trigger_parry_flash"):
+			player.trigger_parry_flash()
+		return
+	var final_dmg: int = damage
+	if enemy_class == EnemyClass.HERETIC and randf() < 0.35:
+		final_dmg = int(damage * 1.3)   # факельный удар еретика
+	player.take_damage(final_dmg, dirp)
+	if enemy_class == EnemyClass.ZOMBIE_CORPSE and player.has_method("apply_worm_infection"):
+		player.apply_worm_infection()
+	if stuns_on_hit and not player.is_dead and player.has_method("stun"):
+		player.stun(stun_power)
 
 func _attack_crystal():
 	can_attack = false
@@ -1419,15 +1498,25 @@ func _clear_sprite_for_programmatic_draw():
 func _summoner_spawn_rats():
 	if not get_parent() or not player or not is_instance_valid(player):
 		return
+	# ЛИМИТЫ (перф + честность): максимум 4 живые крысы НА призывателя,
+	# и глобальный потолок врагов в комнате — 40.
+	summoner_children = summoner_children.filter(func(r): return is_instance_valid(r))
+	if summoner_children.size() >= 4:
+		return
+	var room = get_parent()
+	if room and "enemies" in room and room.enemies.size() >= 40:
+		return
+	var spawn_n: int = mini(2, 4 - summoner_children.size())
 	var enemy_gd = load("res://scripts/enemy.gd")
-	for i in 2:
+	for i in spawn_n:
 		var rat = CharacterBody2D.new()
 		rat.set_script(enemy_gd)
 		rat.enemy_class = EnemyClass.RAT  # set BEFORE add_child → _ready() skips shieldman sprites
 		get_parent().add_child(rat)
-		rat.setup(EnemyClass.RAT, 1, 90.0, 12)
+		rat.setup(EnemyClass.RAT, 10, 90.0, 10)
 		rat.player = player
 		rat.global_position = global_position + Vector2(randf_range(-25, 25), -5)
+		summoner_children.append(rat)
 	# Visual effect — glow hands
 	telegraph_timer = 0.4
 	telegraph_duration = 0.4
@@ -1435,16 +1524,19 @@ func _summoner_spawn_rats():
 func _mummy_spawn_beetle():
 	if not get_parent() or not player or not is_instance_valid(player):
 		return
-	# Cap at 4 beetles alive at once (was 5 — one less for perf)
+	# ЛИМИТЫ: максимум 3 жука на мумию + глобальный потолок комнаты 40.
 	mummy_beetle_children = mummy_beetle_children.filter(func(b): return is_instance_valid(b))
-	if mummy_beetle_children.size() >= 4:
+	if mummy_beetle_children.size() >= 3:
+		return
+	var mroom = get_parent()
+	if mroom and "enemies" in mroom and mroom.enemies.size() >= 40:
 		return
 	var enemy_gd = load("res://scripts/enemy.gd")
 	var beetle = CharacterBody2D.new()
 	beetle.set_script(enemy_gd)
 	beetle.enemy_class = EnemyClass.BEETLE  # set BEFORE add_child → _ready() skips shieldman sprites
 	get_parent().add_child(beetle)
-	beetle.setup(EnemyClass.BEETLE, 1, 28.0, 10)
+	beetle.setup(EnemyClass.BEETLE, 8, 28.0, 8)
 	beetle.player = player
 	beetle.beetle_parent_mummy = self
 	var ang = randf() * TAU
@@ -1452,28 +1544,8 @@ func _mummy_spawn_beetle():
 	mummy_beetle_children.append(beetle)
 
 func _zombie_melee_attack():
-	telegraph_timer = 0.35
-	telegraph_duration = 0.35
-	can_attack = false
-	attack_timer = attack_cooldown
-	is_attacking_melee = true
-	melee_anim_timer = 0.3
-	if player and is_instance_valid(player):
-		var dist = global_position.distance_to(player.global_position)
-		if dist < attack_range + 12:
-			if player.has_method("is_parrying") and player.is_parrying():
-				is_stunned = true
-				stun_timer = 2.5
-				knockback_velocity = (global_position - player.global_position).normalized() * 200
-				knockback_velocity.y = -160
-				if player.has_method("trigger_parry_flash"):
-					player.trigger_parry_flash()
-				return
-			var dir = (player.global_position - global_position).normalized()
-			player.take_damage(damage, dir)
-			# Infect with worms on hit
-			if player.has_method("apply_worm_infection"):
-				player.apply_worm_infection()
+	# Через общий Dead Cells-цикл (замах → удар); черви вешаются в _strike_melee.
+	_melee_attack()
 
 func _spider_shoot_web(dir: Vector2):
 	if not player or not is_instance_valid(player):
@@ -1558,6 +1630,17 @@ func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO):
 	# Armored — меньше отлетает
 	if elite_affix == "armored":
 		knockback_velocity *= 0.5
+
+	# === ФЛИНЧ / СТОЙКОСТЬ (Dead Cells) ===
+	# Лёгкие враги (poise 0) вздрагивают от КАЖДОГО удара и их замах сбивается —
+	# агрессия игрока вознаграждается. Тяжёлые держат poise ударов и продавливают
+	# свой замах — их атаку нужно уважать и уворачиваться.
+	poise_counter += 1
+	if poise_counter > poise:
+		poise_counter = 0
+		flinch_timer = 0.22
+		if pending_melee and poise == 0:
+			pending_melee = false   # замах лёгкого врага ПРЕРВАН ударом
 
 	# Blood splatter burst
 	_spawn_blood_splatter(knockback_dir)
@@ -1806,6 +1889,10 @@ func _draw_simple(s: int) -> void:
 	# Подсказка атаки
 	if is_attacking_melee:
 		draw_rect(Rect2(s * 6, -16, s * 9, 3), Color(0.85, 0.85, 0.9))
+	# Телеграф замаха (мобильная версия): «!» над головой
+	if pending_melee:
+		draw_string(ThemeDB.fallback_font, Vector2(-3, -32), "!",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.3, 0.1, 0.95))
 	# HP-полоска при ранении
 	if health < max_health and max_health > 0:
 		var f = clampf(float(health) / float(max_health), 0.0, 1.0)
@@ -1927,6 +2014,13 @@ func _draw():
 			EnemyClass.CROSSBOW: _draw_crossbow(s)
 			EnemyClass.THROWER: _draw_thrower(s)
 			EnemyClass.SHIELDMAN: _draw_shieldman(s)
+
+	# === ТЕЛЕГРАФ ЗАМАХА: «!» + растущее красное кольцо — атаку видно заранее ===
+	if pending_melee:
+		var tfrac: float = 1.0 - clampf(pending_melee_timer / maxf(0.01, telegraph_duration), 0.0, 1.0)
+		draw_circle(Vector2(0, -12), 4.0 + 12.0 * tfrac, Color(1.0, 0.2, 0.08, 0.14))
+		draw_string(ThemeDB.fallback_font, Vector2(-3, -32), "!",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.3, 0.1, 0.95))
 
 	# Pearl drop indicator
 	if drops_pearl:
@@ -2490,28 +2584,8 @@ func _draw_zombie(s: int):
 # ────────────────────────────────────────────────────────────
 
 func _heretic_attack():
-	telegraph_timer = 0.2
-	telegraph_duration = 0.2
-	can_attack = false
-	attack_timer = attack_cooldown
-	is_attacking_melee = true
-	melee_anim_timer = 0.3
-	if player and is_instance_valid(player):
-		var d = global_position.distance_to(player.global_position)
-		if d < attack_range + 10:
-			if player.has_method("is_parrying") and player.is_parrying():
-				is_stunned = true
-				stun_timer = 2.0
-				knockback_velocity = (global_position - player.global_position).normalized() * 180
-				knockback_velocity.y = -140
-				if player.has_method("trigger_parry_flash"):
-					player.trigger_parry_flash()
-				return
-			var kdir = (player.global_position - global_position).normalized()
-			# 35% chance: torch swipe — deals extra fire damage
-			var torch_hit = randf() < 0.35
-			var final_dmg = int(damage * (1.3 if torch_hit else 1.0))
-			player.take_damage(final_dmg, kdir)
+	# Через общий Dead Cells-цикл; факельный бонус учитывается в _strike_melee.
+	_melee_attack()
 
 func _heretic_on_death():
 	# Notify all living group members: enter 4-second rage
