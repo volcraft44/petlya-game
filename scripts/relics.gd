@@ -123,7 +123,93 @@ const ALL_RELICS: Array = [
 		"icon_color": Color(1.00, 1.00, 0.30),
 		"rarity": "epic",
 	},
+	# === Синергичные реликвии (ярко выражают архетип) ===
+	{
+		"id": "executioner",
+		"name": "Палач",
+		"desc": "Враги ниже 20% HP получают ДВОЙНОЙ урон",
+		"icon_color": Color(0.95, 0.25, 0.15),
+		"rarity": "rare",
+	},
+	{
+		"id": "conductor",
+		"name": "Проводник",
+		"desc": "+35% урона по врагам со статусом (яд/огонь/лёд/шок)",
+		"icon_color": Color(0.45, 0.85, 1.00),
+		"rarity": "rare",
+	},
+	{
+		"id": "regrowth",
+		"name": "Прорастание",
+		"desc": "Восстанавливает 1 HP каждые 4 секунды",
+		"icon_color": Color(0.35, 0.90, 0.45),
+		"rarity": "uncommon",
+	},
 ]
+
+# === АРХЕТИПЫ (Ярость / Тактика / Выживание) ===
+# Собери несколько реликвий одного архетипа — получишь сет-бонус. Это даёт
+# билдам направление вместо кучи разрозненных бонусов.
+const ARCHETYPE_OF := {
+	"bloody_pact": "rage", "rage_amulet": "rage", "thunder_strike": "rage",
+	"swift_blade": "rage", "explosive_arrows": "rage", "bomb_pouch": "rage",
+	"crit_master": "rage", "executioner": "rage",
+	"lucky_coin": "tactics", "soul_eater": "tactics", "frost_aura": "tactics",
+	"frost_strike": "tactics", "chain_lightning": "tactics", "conductor": "tactics",
+	"iron_skin": "survival", "feather_boots": "survival", "vampire_fangs": "survival",
+	"phoenix_feather": "survival", "ghost_step": "survival", "regrowth": "survival",
+}
+
+static func archetype_of(rid: String) -> String:
+	return ARCHETYPE_OF.get(rid, "")
+
+static func archetype_color(a: String) -> Color:
+	match a:
+		"rage":     return Color(0.95, 0.30, 0.20)   # красный
+		"tactics":  return Color(0.35, 0.70, 1.00)   # синий
+		"survival": return Color(0.40, 0.90, 0.45)   # зелёный
+	return Color(0.7, 0.7, 0.7)
+
+static func archetype_name(a: String) -> String:
+	match a:
+		"rage":     return "ЯРОСТЬ"
+		"tactics":  return "ТАКТИКА"
+		"survival": return "ВЫЖИВАНИЕ"
+	return ""
+
+# === ПАКТЫ АЛТАРЯ (risk/reward выбор) ===
+# На алтаре Петли игрок берёт 1 из 3 пактов: сильный бонус ценой недостатка.
+const ALL_PACTS := [
+	{
+		"id": "pact_blood", "name": "Пакт Крови", "desc": "+35% урон, но −25 макс HP",
+		"icon_color": Color(0.85, 0.12, 0.12),
+	},
+	{
+		"id": "pact_glass", "name": "Пакт Стекла", "desc": "+70% урон, но −50% макс HP",
+		"icon_color": Color(0.90, 0.55, 0.95),
+	},
+	{
+		"id": "pact_greed", "name": "Пакт Жадности", "desc": "×2 монет за забег, но враги быстрее",
+		"icon_color": Color(1.00, 0.82, 0.20),
+	},
+	{
+		"id": "pact_stone", "name": "Пакт Камня", "desc": "+40 макс HP и −20% урона по тебе, но −15% урон",
+		"icon_color": Color(0.60, 0.62, 0.70),
+	},
+	{
+		"id": "pact_swift", "name": "Пакт Скорости", "desc": "+25% скорость и +1 дэш, но −15 макс HP",
+		"icon_color": Color(0.80, 0.95, 1.00),
+	},
+	{
+		"id": "pact_loop", "name": "Пакт Петли", "desc": "Дарит случайную реликвию сейчас, но следующая комната — засада",
+		"icon_color": Color(0.55, 0.20, 0.85),
+	},
+]
+
+static func roll_pacts(count: int) -> Array:
+	var pool := ALL_PACTS.duplicate()
+	pool.shuffle()
+	return pool.slice(0, min(count, pool.size()))
 
 static func get_by_id(rid: String) -> Dictionary:
 	for r in ALL_RELICS:

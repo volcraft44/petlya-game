@@ -76,3 +76,25 @@ static func get_starting_heal_tier() -> int:
 	load_meta()
 	# +1 heal charge за достижение каждых 5 уровней
 	return mini(3, furthest_level / 5)
+
+# === ВЕХИ-РАЗЛОКИ (контентные, а не только цифры) ===
+static func unlocked_starting_relic() -> bool:
+	load_meta()
+	return furthest_level >= 3      # дошёл до 3 уровня → каждый забег с реликвией
+
+static func unlocked_extra_dash() -> bool:
+	load_meta()
+	return total_kills >= 300       # 300 убийств → +1 заряд дэша навсегда
+
+static func unlocked_extra_heal_start() -> bool:
+	load_meta()
+	return total_deaths >= 5        # «память петли»: 5 смертей → +1 стартовый хил
+
+# Список вех для показа в меню: [название, открыто?, прогресс_текст].
+static func get_milestones() -> Array:
+	load_meta()
+	return [
+		["Стартовая реликвия", furthest_level >= 3, "уровень %d/3" % mini(furthest_level, 3)],
+		["+1 заряд дэша", total_kills >= 300, "убийств %d/300" % mini(total_kills, 300)],
+		["+1 стартовый хил", total_deaths >= 5, "смертей %d/5" % mini(total_deaths, 5)],
+	]

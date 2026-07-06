@@ -497,6 +497,7 @@ const DASH_RECHARGE_TIME: float = 1.5
 const DASH_DURATION: float = 0.15
 const DASH_SPEED: float = 440.0
 var dash_charges: float = 3.0       # дробное, чтобы плавно копилось
+var dash_max_bonus: int = 0         # +заряды дэша (перо/пакт/мета-разлок)
 var dash_active: bool = false
 var dash_timer: float = 0.0
 var dash_dir: Vector2 = Vector2.RIGHT
@@ -838,6 +839,13 @@ func _process(delta):
 			amulet_timer = amulet_heal_interval
 			heal(1)
 
+	# РЕЛИКВИЯ «Прорастание» (архетип Выживание): +1 HP каждые 4 сек
+	if "regrowth" in relics and health < max_health and not is_dead:
+		_regrowth_timer -= delta
+		if _regrowth_timer <= 0.0:
+			_regrowth_timer = 4.0
+			heal(1)
+
 	# Ledge grab — just hang, wait for player input (handled in _physics_process)
 
 	# Перерисовка спрайта через кадр (30 Гц) — для пиксель-арта незаметно,
@@ -927,7 +935,7 @@ func _physics_process(delta):
 	# Дэш-чарджи восстанавливаются МГНОВЕННО, как только персонаж коснулся
 	# пола (не в воздухе/на лестнице/уступе). Так дэш — наземный инструмент.
 	if not dash_active and is_on_floor() and not is_on_vine and not is_grabbing_ledge:
-		dash_charges = float(DASH_MAX_CHARGES)
+		dash_charges = float(DASH_MAX_CHARGES + dash_max_bonus)
 
 	# Anti-spam: если Space НЕ нажат — значит игрок его отпустил, готов к новому прыжку
 	if not Input.is_action_pressed("jump"):
@@ -1809,8 +1817,19 @@ func _do_roll():
 	is_attacking = false
 	attack_shape.disabled = true
 
+func _wall_between(to: Vector2) -> bool:
+	# Есть ли СТЕНА между игроком и точкой to (чтобы не бить сквозь стены).
+	var space = get_world_2d().direct_space_state
+	var q := PhysicsRayQueryParameters2D.create(global_position + Vector2(0, -10), to)
+	q.collision_mask = 4          # слой стен/тайлов
+	q.exclude = [self]
+	return not space.intersect_ray(q).is_empty()
+
 func _on_attack_hit(body) -> bool:
 	if body.has_method("take_damage") and is_attacking:
+		# Нельзя бить СКВОЗЬ СТЕНЫ: если между игроком и врагом стена — мимо.
+		if _wall_between(body.global_position + Vector2(0, -8)):
+			return false
 		var wd = weapon_data.get(current_weapon, weapon_data[1])
 		var dmg = wd.damage
 		# Pickaxe deals very low damage to monsters (incentivize switching)
@@ -1859,6 +1878,34 @@ func _on_attack_hit(body) -> bool:
 		if "rage_amulet" in relics:
 			var hp_lost_pct = 1.0 - float(health) / float(max_health)
 			dmg = int(dmg * (1.0 + hp_lost_pct))
+
+		# === АРХЕТИП «ЯРОСТЬ»: сет-бонус к урону (2+ / 4+ реликвий) ===
+		var rage_n = _arch_count("rage")
+		if rage_n >= 4:
+			dmg = int(dmg * 1.30)
+		elif rage_n >= 2:
+			dmg = int(dmg * 1.14)
+
+		# === СИНЕРГИИ ПО СОСТОЯНИЮ ВРАГА ===
+		# Палач: добивание врагов на низком HP. Проводник + сет «Тактика»:
+		# бонус по врагам со статусом (яд/огонь/лёд/шок).
+		if "executioner" in relics and "health" in body and "max_health" in body \
+			and body.max_health > 0 and float(body.health) / float(body.max_health) < 0.20 \
+			and not ("is_boss" in body and body.is_boss):
+			dmg = int(dmg * 2.0)
+		var has_status := false
+		for st in ["is_poisoned", "is_on_fire", "frozen_timer", "shocked_timer"]:
+			if st in body and body.get(st):
+				has_status = true
+				break
+		if has_status:
+			var status_mult := 1.0
+			if "conductor" in relics:
+				status_mult += 0.35
+			if _arch_count("tactics") >= 2:
+				status_mult += 0.25   # сет «Тактика»: статусы больнее
+			if status_mult > 1.0:
+				dmg = int(dmg * status_mult)
 
 		# === CS HEADSHOT ===
 		# Если игрок атакует сверху (attack_direction == 1) ИЛИ игрок выше центра врага
@@ -2232,6 +2279,9 @@ func trigger_parry_flash():
 	queue_redraw()
 
 func on_kill(xp_gain: int, coins_gain: int):
+	# ПАКТ ЖАДНОСТИ: ×2 монет
+	if pact_greed_active:
+		coins_gain *= 2
 	# РЕЛИКВИЯ: Lucky Coin — +50% монет
 	if "lucky_coin" in relics:
 		coins_gain = int(coins_gain * 1.5)
@@ -2328,6 +2378,15 @@ func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO):
 	# РЕЛИКВИЯ: Железная Кожа — −25% урона
 	if "iron_skin" in relics:
 		amount = maxi(1, int(amount * 0.75))
+	# АРХЕТИП «ВЫЖИВАНИЕ»: сет-бонус к защите (2+ / 4+ реликвий)
+	var surv_n = _arch_count("survival")
+	if surv_n >= 4:
+		amount = maxi(1, int(amount * 0.72))
+	elif surv_n >= 2:
+		amount = maxi(1, int(amount * 0.86))
+	# ПАКТ КАМНЯ: −20% урона по игроку
+	if pact_stone_active:
+		amount = maxi(1, int(amount * 0.80))
 	# LEVEL MODIFIER множитель получаемого урона
 	if taken_damage_mult != 1.0:
 		amount = maxi(1, int(amount * taken_damage_mult))
@@ -2846,7 +2905,7 @@ func add_relic(rid: String):
 	match rid:
 		"feather_boots":
 			speed *= 1.15
-			# +1 чардж даша делается через main.gd (DASH_MAX_CHARGES — const)
+			dash_max_bonus += 1   # +1 заряд дэша
 		"swift_blade":
 			attack_cooldown *= 0.75
 		"crit_master":
@@ -2858,6 +2917,47 @@ func add_relic(rid: String):
 			# Гранаты убраны — перк теперь даёт немного скорости.
 			speed *= 1.05
 
+func _arch_count(a: String) -> int:
+	# Сколько собранных реликвий принадлежат архетипу a (для сет-бонусов).
+	var n := 0
+	for rid in relics:
+		if _Relics.archetype_of(rid) == a:
+			n += 1
+	return n
+
+# === ПАКТЫ АЛТАРЯ ===
+var pact_stone_active: bool = false   # −20% получаемого урона
+var pact_greed_active: bool = false   # ×2 монет
+var _regrowth_timer: float = 0.0
+
+func apply_pact(pid: String) -> void:
+	match pid:
+		"pact_blood":
+			damage_mult *= 1.35
+			max_health = maxi(1, max_health - 25)
+			health = mini(health, max_health)
+		"pact_glass":
+			damage_mult *= 1.70
+			max_health = maxi(1, int(max_health * 0.5))
+			health = mini(health, max_health)
+		"pact_greed":
+			pact_greed_active = true
+		"pact_stone":
+			pact_stone_active = true
+			max_health += 40
+			health += 40
+			damage_mult *= 0.85
+		"pact_swift":
+			speed *= 1.25
+			dash_max_bonus += 1
+			max_health = maxi(1, max_health - 15)
+			health = mini(health, max_health)
+		"pact_loop":
+			pass   # реликвия + засада выдаются из main.gd
+	if has_signal("health_changed"):
+		health_changed.emit(health)
+
+var _Relics = load("res://scripts/relics.gd")
 var dbg_draw_ms: float = 0.0
 
 func _draw():

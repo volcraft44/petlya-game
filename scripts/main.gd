@@ -256,6 +256,8 @@ func _ready():
 		hud.relic_chosen.connect(_on_relic_chosen)
 	if hud.has_signal("modifier_chosen"):
 		hud.modifier_chosen.connect(_on_modifier_chosen)
+	if hud.has_signal("pact_chosen"):
+		hud.pact_chosen.connect(_on_pact_chosen)
 
 	# Game Over
 	var go_script = load("res://scripts/game_over.gd")
@@ -406,6 +408,21 @@ func _apply_meta_bonuses():
 	if heal_tier > 0:
 		player.max_heal_charges += heal_tier
 		player.heal_charges += heal_tier
+
+	# === ВЕХИ-РАЗЛОКИ ===
+	# Стартовая реликвия (открывается за достижение 3 уровня).
+	if Meta.unlocked_starting_relic() and "add_relic" in player and "relics" in player:
+		var Relics = load("res://scripts/relics.gd")
+		var choices = Relics.roll_choices(1, player.relics)
+		if not choices.is_empty():
+			player.add_relic(choices[0].id)
+	# +1 стартовый хил («память петли» — за 5 смертей).
+	if Meta.unlocked_extra_heal_start():
+		player.max_heal_charges += 1
+		player.heal_charges += 1
+	# +1 заряд дэша навсегда (за 300 убийств).
+	if Meta.unlocked_extra_dash() and "dash_max_bonus" in player:
+		player.dash_max_bonus += 1
 
 func _apply_custom_config():
 	if _custom_config.is_empty():
@@ -649,6 +666,8 @@ func _load_room():
 	current_room.setup(current_level, enemy_scene, player)
 	current_room.room_cleared.connect(_on_room_cleared)
 	current_room.door_used.connect(_on_door_used)
+	if current_room.has_signal("altar_pact_requested"):
+		current_room.altar_pact_requested.connect(_on_altar_pact_requested)
 
 	# Параллакс-фон: подстраиваем палитру под текущий биом
 	if background_layers and background_layers.has_method("set_biome"):
@@ -1434,7 +1453,7 @@ func _update_cs_features(delta: float):
 
 	# === Синхронизация bhop/dash в overlay ===
 	cs_overlay.bhop_stacks = player.bhop_stacks
-	cs_overlay.update_dash(player.dash_charges, player.DASH_MAX_CHARGES)
+	cs_overlay.update_dash(player.dash_charges, player.DASH_MAX_CHARGES + player.dash_max_bonus)
 	# Combo-награды: передаём текущий стиль-ранг игроку
 	if cs_overlay.has_method("get_style_rank"):
 		player.style_rank = cs_overlay.get_style_rank()
@@ -2234,6 +2253,37 @@ func _offer_relic_choice():
 func _on_relic_chosen(rid: String):
 	if player and "add_relic" in player:
 		player.add_relic(rid)
+
+func _on_altar_pact_requested():
+	# Алтарь Петли: показываем выбор 1 из 3 пактов (risk/reward).
+	if not hud or not player:
+		return
+	var Relics = load("res://scripts/relics.gd")
+	var pacts = Relics.roll_pacts(3)
+	if pacts.is_empty():
+		return
+	if hud.has_method("show_pact_choice"):
+		hud.show_pact_choice(pacts)
+
+func _on_pact_chosen(pid: String):
+	if not player:
+		return
+	if "apply_pact" in player:
+		player.apply_pact(pid)
+	# Пакт Петли: даёт случайную реликвию сейчас + засаду в текущей комнате.
+	if pid == "pact_loop":
+		var Relics = load("res://scripts/relics.gd")
+		var owned = player.relics if "relics" in player else []
+		var choices = Relics.roll_choices(1, owned)
+		if not choices.is_empty() and "add_relic" in player:
+			player.add_relic(choices[0].id)
+		# Засада — несколько врагов рядом с игроком
+		if current_room and current_room.has_method("_spawn_single_enemy"):
+			for i in 3:
+				var side = 1.0 if randf() < 0.5 else -1.0
+				current_room._spawn_single_enemy(
+					player.global_position.x + side * randf_range(60, 120),
+					player.global_position.y - 10)
 
 func _show_boss_bonus_case():
 	# CS-стиль открытие кейса УБРАНО по просьбе игрока — сразу обычный выбор бонуса.

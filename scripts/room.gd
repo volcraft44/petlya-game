@@ -3,6 +3,7 @@ extends Node2D
 signal room_cleared
 signal door_used(door)
 signal challenge_complete
+signal altar_pact_requested   # игрок активировал Алтарь Петли — показать выбор пакта
 
 var room_width: float = 3200.0
 var room_height: float = 1360.0
@@ -3386,17 +3387,13 @@ func _process(delta):
 				_shop_open_flag = true
 				open_shop_menu_request.emit()
 
-	# Altar interaction
+	# Altar interaction — АЛТАРЬ ПЕТЛИ: открывает выбор пакта (risk/reward).
 	if room_event == "altar" and not altar_used and player_ref and is_instance_valid(player_ref):
-		var altar_pos = Vector2(room_width * 0.5, room_height * 0.5)
-		if player_ref.global_position.distance_to(altar_pos) < 30 and Input.is_action_just_pressed("interact"):
-			if player_ref.health > 3:
-				player_ref.health -= 3
-				if player_ref.has_signal("health_changed"):
-					player_ref.health_changed.emit(player_ref.health)
-				altar_used = true
-				player_ref.equip_weapon(randi_range(10, 22))
-				queue_redraw()
+		var altar_pos = Vector2(room_width * 0.5, room_height * 0.45)
+		if player_ref.global_position.distance_to(altar_pos) < 34 and Input.is_action_just_pressed("interact"):
+			altar_used = true
+			altar_pact_requested.emit()
+			queue_redraw()
 
 	# Barrel explosion check
 	if player_ref and is_instance_valid(player_ref) and player_ref.is_attacking:
@@ -5268,7 +5265,7 @@ func _draw_body():
 			var g = 0.28 + sin(t2) * 0.12
 			draw_circle(ap + Vector2(0, -5), 13, Color(0.6, 0.2, 1.0, g))
 			draw_string(ThemeDB.fallback_font, Vector2(ap.x, ap.y - 24),
-				"АЛТАРЬ [-3HP]", HORIZONTAL_ALIGNMENT_CENTER, -1, 8, Color(0.85, 0.55, 1.0, 0.95))
+				"АЛТАРЬ ПЕТЛИ", HORIZONTAL_ALIGNMENT_CENTER, -1, 8, Color(0.85, 0.55, 1.0, 0.95))
 			if player_ref and is_instance_valid(player_ref):
 				if player_ref.global_position.distance_to(Vector2(room_width * 0.5, room_height * 0.45)) < 30:
 					draw_string(ThemeDB.fallback_font, Vector2(ap.x, ap.y + 18),

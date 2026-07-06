@@ -103,8 +103,10 @@ var level_up_selected: int = 0
 signal level_up_chosen(choice_id: String)
 signal relic_chosen(rid: String)
 signal modifier_chosen(mod_id: String)
+signal pact_chosen(pact_id: String)
 
-# Relic choice UI (используется и для модификаторов уровня)
+# Relic choice UI (используется и для модификаторов уровня и пактов)
+var _Relics = load("res://scripts/relics.gd")
 var relic_menu_open: bool = false
 var relic_choices: Array = []
 var relic_selected: int = 0
@@ -295,6 +297,14 @@ func show_modifier_choice(choices: Array):
 	get_tree().paused = true
 	draw_node.queue_redraw()
 
+func show_pact_choice(choices: Array):
+	relic_menu_open = true
+	relic_menu_mode = "pact"
+	relic_choices = choices
+	relic_selected = 0
+	get_tree().paused = true
+	draw_node.queue_redraw()
+
 func close_relic_choice():
 	relic_menu_open = false
 	relic_choices = []
@@ -311,7 +321,11 @@ func _draw_relic_choice(screen_size: Vector2):
 	var cy = screen_size.y * 0.5
 	var font := ThemeDB.fallback_font
 	# Заголовок
-	var title = "ВЫБЕРИ МОДИФИКАТОР УРОВНЯ" if relic_menu_mode == "modifier" else "ВЫБЕРИ РЕЛИКВИЮ"
+	var title := "ВЫБЕРИ РЕЛИКВИЮ"
+	if relic_menu_mode == "modifier":
+		title = "ВЫБЕРИ МОДИФИКАТОР УРОВНЯ"
+	elif relic_menu_mode == "pact":
+		title = "АЛТАРЬ ПЕТЛИ — ВЫБЕРИ ПАКТ"
 	var t_size = font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 22)
 	draw_node.draw_string(font, Vector2(cx - t_size.x * 0.5, cy - 140),
 		title, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.85, 0.20))
@@ -350,12 +364,21 @@ func _draw_relic_choice(screen_size: Vector2):
 		draw_node.draw_string(font, Vector2(x + 10, y + 130),
 			desc, HORIZONTAL_ALIGNMENT_LEFT, card_w - 20, 10,
 			Color(0.85, 0.85, 0.92, 0.9))
-		# Лейбл рарности (только для реликвий)
+		# Лейбл рарности + АРХЕТИП (цветной) — видно направление билда
 		if relic_menu_mode == "relic" and r.has("rarity"):
 			var rar_text = r.rarity.to_upper()
 			var rr_size = font.get_string_size(rar_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9)
 			draw_node.draw_string(font, Vector2(x + card_w * 0.5 - rr_size.x * 0.5, y + card_h - 12),
 				rar_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, rar_col)
+			var arch: String = _Relics.archetype_of(r.id)
+			if arch != "":
+				var a_col: Color = _Relics.archetype_color(arch)
+				var a_txt: String = _Relics.archetype_name(arch)
+				var a_size = font.get_string_size(a_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9)
+				draw_node.draw_rect(Rect2(x + card_w * 0.5 - a_size.x * 0.5 - 4, y + 74, a_size.x + 8, 12),
+					Color(a_col.r, a_col.g, a_col.b, 0.22))
+				draw_node.draw_string(font, Vector2(x + card_w * 0.5 - a_size.x * 0.5, y + 83),
+					a_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, a_col)
 
 	# Подсказка
 	draw_node.draw_string(font, Vector2(cx - 110, cy + 130),
@@ -482,6 +505,8 @@ func _unhandled_input(event):
 					var rid = relic_choices[relic_selected].id
 					if relic_menu_mode == "modifier":
 						modifier_chosen.emit(rid)
+					elif relic_menu_mode == "pact":
+						pact_chosen.emit(rid)
 					else:
 						relic_chosen.emit(rid)
 				close_relic_choice()

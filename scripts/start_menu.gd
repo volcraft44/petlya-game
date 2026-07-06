@@ -473,7 +473,7 @@ func _on_draw() -> void:
 		var stats_x = vs.x - 240
 		var stats_y = vs.y - 90
 		# Полупрозрачная подложка
-		draw_node.draw_rect(Rect2(stats_x - 8, stats_y - 16, 235, 82),
+		draw_node.draw_rect(Rect2(stats_x - 8, stats_y - 16, 235, 132),
 			Color(0.04, 0.03, 0.06, 0.7))
 		draw_node.draw_string(font, Vector2(stats_x, stats_y),
 			"ПАМЯТЬ ПЕТЛИ", HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
@@ -498,6 +498,17 @@ func _on_draw() -> void:
 		draw_node.draw_string(font, Vector2(stats_x, stats_y + 42),
 			"Баффы: " + buffs_text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.55, 0.95, 0.55))
+		# Вехи-разлоки: открыто (зелёное ✓) или прогресс (серое)
+		draw_node.draw_string(font, Vector2(stats_x, stats_y + 58),
+			"РАЗЛОКИ:", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.00, 0.85, 0.20))
+		var milestones = Meta.get_milestones()
+		for mi in milestones.size():
+			var m = milestones[mi]
+			var done: bool = m[1]
+			var line: String = ("✓ " + m[0]) if done else ("• %s (%s)" % [m[0], m[2]])
+			var mcol: Color = Color(0.55, 0.95, 0.55) if done else Color(0.6, 0.6, 0.66)
+			draw_node.draw_string(font, Vector2(stats_x, stats_y + 72 + mi * 12),
+				line, HORIZONTAL_ALIGNMENT_LEFT, 230, 8, mcol)
 
 	if screen == "custom":
 		_draw_custom(vs)
