@@ -234,6 +234,26 @@ func show_headshot(world_pos: Vector2) -> void:
 func add_kill_style() -> void:
 	add_style(50.0, "KILL", Color(0.85, 0.85, 0.92))
 
+# ШТРАФ ЗА ПОЛУЧЕННЫЙ УРОН: стиль резко падает — держаться в высоком ранге
+# можно только не получая урона (награда за уворот/парри/движение).
+func lose_style() -> void:
+	if style_points <= 0.0:
+		return
+	# Теряем 45% текущих очков — почти всегда сбивает на ранг-два вниз.
+	style_points = max(0.0, style_points * 0.55)
+	_style_grace_t = 0.0
+	_style_actions.push_front({
+		"text": "HIT — STYLE LOST", "points": 0,
+		"life": STYLE_ACTION_LIFE, "max_life": STYLE_ACTION_LIFE,
+		"color": Color(1.0, 0.35, 0.30),
+	})
+	if _style_actions.size() > 6:
+		_style_actions.resize(6)
+
+# Успешное парирование — крупный кусок стиля.
+func add_parry_style() -> void:
+	add_style(120.0, "PARRY!", Color(0.45, 0.85, 1.0))
+
 # === BHOP API ===
 # Bhop НЕ добавляет очков стиля — он только СОХРАНЯЕТ текущий ранг
 # (сбрасывает таймер затухания), плюс показывает попап и трейл.

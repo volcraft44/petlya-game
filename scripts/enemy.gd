@@ -1625,6 +1625,7 @@ func take_damage(amount: int, knockback_dir: Vector2 = Vector2.ZERO):
 	is_hit = true
 	hit_flash_timer = 0.15
 	hit_shake_timer = 0.08
+	_miniboss_check_enrage()   # мини-босс входит в ярость на 50% HP
 	knockback_velocity = knockback_dir * 130
 	knockback_velocity.y = -80
 	# Armored — меньше отлетает
@@ -1855,6 +1856,18 @@ func make_miniboss():
 	speed = speed * 1.3
 	detection_range = detection_range * 1.5
 	scale = Vector2(1.4, 1.4)
+	poise = maxi(poise, 3)   # мини-босса не застанишь одним ударом
+
+# Фаза ярости мини-босса (ниже 50% HP): быстрее, агрессивнее, чаще бьёт.
+var miniboss_enraged: bool = false
+func _miniboss_check_enrage():
+	if is_miniboss and not miniboss_enraged and max_health > 0 \
+		and float(health) / float(max_health) <= 0.5:
+		miniboss_enraged = true
+		speed *= 1.4
+		attack_cooldown *= 0.6
+		damage = int(damage * 1.25)
+		white_flash_timer = 0.4   # заметная вспышка при переходе в ярость
 
 func _mage_shoot(dir: Vector2):
 	telegraph_timer = 0.35
@@ -2107,10 +2120,16 @@ func _draw():
 
 	# Mini-boss crown and HP bar
 	if is_miniboss:
-		draw_rect(Rect2(-5, -30, 10, 4), Color(1, 0.8, 0.1, 0.9))
-		draw_rect(Rect2(-6, -34, 4, 4), Color(1, 0.8, 0.1, 0.9))
-		draw_rect(Rect2(-1, -36, 2, 6), Color(1, 0.8, 0.1, 0.9))
-		draw_rect(Rect2(3, -34, 4, 4), Color(1, 0.8, 0.1, 0.9))
+		# Аура ЯРОСТИ (ниже 50% HP): пульсирующее красное кольцо + шипы короны.
+		if miniboss_enraged:
+			var ep = 0.5 + 0.5 * sin(_elite_pulse * 6.0)
+			draw_circle(Vector2(0, -12), 20.0 + ep * 4.0, Color(1.0, 0.15, 0.05, 0.10 + ep * 0.10))
+			draw_arc(Vector2(0, -12), 18.0, 0, TAU, 20, Color(1.0, 0.25, 0.10, 0.55), 1.5)
+		var crown_col := Color(1.0, 0.30, 0.10, 0.95) if miniboss_enraged else Color(1, 0.8, 0.1, 0.9)
+		draw_rect(Rect2(-5, -30, 10, 4), crown_col)
+		draw_rect(Rect2(-6, -34, 4, 4), crown_col)
+		draw_rect(Rect2(-1, -36, 2, 6), crown_col)
+		draw_rect(Rect2(3, -34, 4, 4), crown_col)
 		var hp_pct = float(health) / float(max_health)
 		draw_rect(Rect2(-12, -38, 24, 3), Color(0.1, 0.1, 0.1, 0.8))
 		draw_rect(Rect2(-12, -38, 24 * hp_pct, 3), Color(1.0 - hp_pct, hp_pct * 0.8, 0.1, 0.9))

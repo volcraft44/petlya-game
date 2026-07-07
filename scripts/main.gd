@@ -420,9 +420,6 @@ func _apply_meta_bonuses():
 	if Meta.unlocked_extra_heal_start():
 		player.max_heal_charges += 1
 		player.heal_charges += 1
-	# +1 заряд дэша навсегда (за 300 убийств).
-	if Meta.unlocked_extra_dash() and "dash_max_bonus" in player:
-		player.dash_max_bonus += 1
 
 func _apply_custom_config():
 	if _custom_config.is_empty():
@@ -1457,6 +1454,11 @@ func _update_cs_features(delta: float):
 	# Combo-награды: передаём текущий стиль-ранг игроку
 	if cs_overlay.has_method("get_style_rank"):
 		player.style_rank = cs_overlay.get_style_rank()
+	# Награда за парирование: стиль-очки при каждом новом успешном парри.
+	if "parry_reward_count" in player and player.parry_reward_count > _last_parry_count:
+		_last_parry_count = player.parry_reward_count
+		if cs_overlay.has_method("add_parry_style"):
+			cs_overlay.add_parry_style()
 	# Передаём ВСЕ новые точки трейла из игрока в overlay
 	if player.bhop_trail.size() > 0:
 		for tp in player.bhop_trail:
@@ -1920,11 +1922,15 @@ func _on_lockpick_failed():
 	hud.show_message("Lockpick broken! Try again...", 2.0)
 
 var _last_player_health: int = 999
+var _last_parry_count: int = 0
 
 func _on_player_health_changed(new_health):
 	hud.update_health(new_health)
 	if new_health < _last_player_health:
 		play_sfx("hit")
+		# ШТРАФ СТИЛЯ: получил урон — ранг падает (Тир 2).
+		if cs_overlay and cs_overlay.has_method("lose_style"):
+			cs_overlay.lose_style()
 	_last_player_health = new_health
 
 # === SOUND ===

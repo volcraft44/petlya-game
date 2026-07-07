@@ -2273,9 +2273,16 @@ func equip_weapon(weapon_id: int):
 func is_parrying() -> bool:
 	return is_shielding and parry_window > 0.0
 
+var parry_reward_count: int = 0   # растёт при каждом успешном парировании (читает main)
+
 func trigger_parry_flash():
 	parry_flash_timer = 0.3
 	screen_shake.emit(2.5, 0.15)
+	# ЭКОНОМИКА ПАРИРОВАНИЯ (Тир 2): успешный парри лечит и даёт стиль/дэш.
+	parry_reward_count += 1
+	if health < max_health:
+		heal(6)
+	dash_charges = float(DASH_MAX_CHARGES + dash_max_bonus)   # мгновенно перезаряжает дэш
 	queue_redraw()
 
 func on_kill(xp_gain: int, coins_gain: int):
