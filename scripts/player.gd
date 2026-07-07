@@ -10,6 +10,7 @@ signal attacked
 signal killstreak_changed(streak: int)         # эмитится когда стрик растёт (1, 2, 3...)
 signal killstreak_reset                         # эмитится при получении урона
 signal headshot_landed(world_pos: Vector2)     # хедшот по врагу
+signal dealt_hit(is_crit)                       # игрок попал по врагу (звук удара)
 signal inspect_requested(weapon_data: Dictionary)  # запрос показа инспекта
 signal bhop_perfect(stacks: int, world_pos: Vector2)  # успешный bhop
 signal dash_used(remaining_charges: int)              # дашнули
@@ -2040,6 +2041,7 @@ func _on_attack_hit(body) -> bool:
 
 		body.take_damage(dmg, knockback)
 		_spawn_damage_number(body.global_position, dmg, is_crit)
+		dealt_hit.emit(is_crit)   # звук мясистого попадания
 
 		# === STYLE COMBO REWARD: lifesteal на ранге S+ ===
 		if style_rank >= 4 and health < max_health and not ("bloody_pact" in relics):

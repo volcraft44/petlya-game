@@ -1,6 +1,7 @@
 extends CharacterBody2D
 
 signal died(enemy)
+signal telegraph_started(pos)   # враг начал ЗАМАХ — main проигрывает аудио-телеграф
 
 # Enemy types
 enum EnemyClass { ARCHER, CROSSBOW, THROWER, SHIELDMAN, FLY, STEALTH, MAGE, SPIDER,
@@ -1421,6 +1422,7 @@ func _melee_attack():
 	attack_timer = attack_cooldown
 	pending_melee = true
 	pending_melee_timer = tele
+	telegraph_started.emit(global_position)   # аудио-«тень» атаки
 
 func _strike_melee():
 	# Момент удара — после замаха. Игрок мог уйти: проверяем дистанцию заново.

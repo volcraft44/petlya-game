@@ -556,6 +556,8 @@ func _create_player():
 		player.bhop_perfect.connect(func(_s, _p): play_sfx("bhop"))
 	if player.has_signal("headshot_landed"):
 		player.headshot_landed.connect(func(_p): play_sfx("headshot"))
+	if player.has_signal("dealt_hit") and not player.dealt_hit.is_connected(_on_player_dealt_hit):
+		player.dealt_hit.connect(_on_player_dealt_hit)
 	if player.has_signal("footstep"):
 		player.footstep.connect(func(): play_sfx("step"))
 	if player.has_signal("weapon_picked"):
@@ -1310,6 +1312,32 @@ func _end_insanity_sequence() -> void:
 # ───────────────────────────────────────────────────────────────────────────
 
 func _process(delta):
+	# Подключаем аудио-телеграф к новым врагам (в т.ч. призванным) раз в ~8 кадров.
+	if current_room and is_instance_valid(current_room) and "enemies" in current_room \
+		and Engine.get_process_frames() % 8 == 0:
+		for en in current_room.enemies:
+			if is_instance_valid(en) and en.has_signal("telegraph_started") \
+				and not en.telegraph_started.is_connected(_on_enemy_telegraph):
+				en.telegraph_started.connect(_on_enemy_telegraph)
+
+	# === НАКАЛ БОЕВОЙ МУЗЫКИ ===
+	# Музыка плавно набухает, когда рядом враги — бой ощущается интенсивнее,
+	# затихает в передышке. Не трогаем во время смерти/паузы (там свои фейды).
+	if music_ap and is_instance_valid(music_ap) and player and is_instance_valid(player) \
+		and not player.is_dead and not get_tree().paused:
+		var near_enemies := 0
+		if current_room and is_instance_valid(current_room) and "enemies" in current_room:
+			for en in current_room.enemies:
+				if is_instance_valid(en) and en.global_position.distance_to(player.global_position) < 320.0:
+					near_enemies += 1
+					if near_enemies >= 3:
+						break
+		var target_tension: float = clampf(near_enemies / 3.0, 0.0, 1.0)
+		var rate: float = 2.5 if target_tension > music_tension else 1.0
+		music_tension = lerpf(music_tension, target_tension, clampf(delta * rate, 0.0, 1.0))
+		var base_db: float = linear_to_db(settings_master_vol / 100.0) - 22.0
+		music_ap.volume_db = base_db + music_tension * 7.0
+
 	# Психоделика усиливается при низком HP («штырит» сильнее у смерти)
 	if _psy_mat and settings_psy > 0 and player and is_instance_valid(player) and not player.is_dead:
 		var hp_frac := float(player.health) / float(maxi(player.max_health, 1))
@@ -1459,6 +1487,7 @@ func _update_cs_features(delta: float):
 		_last_parry_count = player.parry_reward_count
 		if cs_overlay.has_method("add_parry_style"):
 			cs_overlay.add_parry_style()
+		play_sfx("parry")   # звонкий металлический звон парирования
 	# Передаём ВСЕ новые точки трейла из игрока в overlay
 	if player.bhop_trail.size() > 0:
 		for tp in player.bhop_trail:
@@ -1914,6 +1943,17 @@ func _on_enemy_died_style(_enemy):
 	if cs_overlay:
 		cs_overlay.add_kill_style()
 
+func _on_player_dealt_hit(is_crit):
+	# Мясистый удар по врагу + чуть звонче на крите.
+	play_sfx("enemyhit")
+	if is_crit:
+		play_sfx("critical")
+
+func _on_enemy_telegraph(pos):
+	# Аудио-«тень» атаки — только если враг рядом с игроком (не спамим со всей карты).
+	if player and is_instance_valid(player) and player.global_position.distance_to(pos) < 260.0:
+		play_sfx("windup")
+
 func _on_lockpick_success():
 	_complete_door()
 
@@ -2218,6 +2258,31 @@ func _generate_sfx_buffer(type: String, sr: float, frames: int) -> PackedVector2
 				var env = exp(-t * 22)
 				var s = sin(t * max(90.0, freq) * TAU) * env * 0.14
 				buf[i] = Vector2(s, s)
+		"windup":
+			# Аудио-телеграф врага: нарастающий тревожный тон — «сейчас ударит».
+			for i in frames:
+				var t = float(i) / sr
+				var freq = 180.0 + t * 520.0            # тон ползёт ВВЕРХ
+				var env = clampf(t * 6.0, 0.0, 1.0) * exp(-t * 3.5)
+				var s = sin(t * freq * TAU) * env * 0.10
+				var wob = sin(t * 30.0 * TAU) * 0.02 * env
+				buf[i] = Vector2(s + wob, s + wob)
+		"enemyhit":
+			# Мясистый удар при попадании ПО врагу — «чувствуется контакт».
+			for i in frames:
+				var t = float(i) / sr
+				var env = exp(-t * 30)
+				var thud = sin(t * max(70.0, 240.0 - t * 700.0) * TAU) * env * 0.20
+				var n = randf_range(-1, 1) * env * 0.14
+				buf[i] = Vector2(thud + n, thud + n)
+		"parry":
+			# Металлический ЗВОН парирования — яркий, звонкий, наградной.
+			for i in frames:
+				var t = float(i) / sr
+				var env = exp(-t * 9)
+				var ring = (sin(t * 2100.0 * TAU) * 0.5 + sin(t * 3150.0 * TAU) * 0.3 \
+					+ sin(t * 4700.0 * TAU) * 0.2) * env * 0.16
+				buf[i] = Vector2(ring, ring)
 	return buf
 
 # === POST-BOSS BONUS ===
