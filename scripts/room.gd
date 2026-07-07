@@ -1342,6 +1342,8 @@ func _postprocess_platformer():
 	var c := 5
 	while c < grid_cols - 5 and plats_added < 70:
 		c += rng.randi_range(4, 7)
+		if c >= grid_cols - 6:
+			break   # не выходим за пределы сетки (иначе grid[r][c] — OOB)
 		var r := 4
 		while r < grid_rows - 3:
 			if grid[r][c] == 0:
@@ -1378,6 +1380,8 @@ func _postprocess_platformer():
 	var c2 := 6
 	while c2 < grid_cols - 6 and sb_added < sb_max:
 		c2 += rng.randi_range(3, 6)
+		if c2 >= grid_cols - 2:
+			break   # держим c2±1 в пределах сетки
 		if absi(c2 - sx_tile) <= 5 or _in_arena_cols(c2):
 			continue
 		if rng.randf() < 0.5:
@@ -1405,6 +1409,8 @@ func _postprocess_platformer():
 	var c3 := 12
 	while c3 < grid_cols - 12 and pits_added < pits_max:
 		c3 += rng.randi_range(9, 16)
+		if c3 >= grid_cols - 12:
+			break   # оставляем запас под ширину ямы (c3+gapw) в пределах сетки
 		if absi(c3 - sx_tile) <= 8 or _in_arena_cols(c3):
 			continue
 		for rr in range(6, grid_rows - 6):
