@@ -172,24 +172,24 @@ var has_wall_sword: bool = false  # pulled sword from wall on level 1
 var weapon_data: Dictionary = {
 	0: {"name": "Кулаки", "damage": 5, "cooldown": 0.3, "range": 15, "blade_len": 8, "speed_mult": 1.0,
 		"color": Color(0.9, 0.8, 0.7), "glow": Color(1,1,1,0), "heal_on_kill": false, "rarity": "common"},
-	1: {"name": "Меч", "damage": 20, "cooldown": 0.22, "range": 22, "blade_len": 22, "speed_mult": 1.0,
+	1: {"name": "Меч", "damage": 18, "cooldown": 0.30, "range": 22, "blade_len": 22, "speed_mult": 1.0,
 		"color": Color(0.85, 0.85, 0.92), "glow": Color(1,1,1,0.15), "heal_on_kill": false, "rarity": "common"},
 	2: {"name": "Длинный Меч", "damage": 35, "cooldown": 0.4, "range": 35, "blade_len": 32, "speed_mult": 0.85,
 		"color": Color(0.7, 0.75, 0.85), "glow": Color(0.5,0.6,0.8,0.2), "heal_on_kill": false, "rarity": "uncommon"},
-	3: {"name": "Клинки", "damage": 12, "cooldown": 0.1, "range": 20, "blade_len": 18, "speed_mult": 1.15,
+	3: {"name": "Клинки", "damage": 8, "cooldown": 0.14, "range": 20, "blade_len": 18, "speed_mult": 1.15,
 		"color": Color(0.4, 0.85, 1.0), "glow": Color(0.3,0.7,1,0.3), "heal_on_kill": false, "rarity": "uncommon"},
-	4: {"name": "Молот", "damage": 50, "cooldown": 0.55, "range": 28, "blade_len": 20, "speed_mult": 0.7,
+	4: {"name": "Молот", "damage": 55, "cooldown": 0.85, "range": 28, "blade_len": 20, "speed_mult": 0.7,
 		"color": Color(0.55, 0.55, 0.6), "glow": Color(0.8,0.6,0.3,0.2), "heal_on_kill": false, "rarity": "rare"},
-	5: {"name": "Клинки Вампира", "damage": 15, "cooldown": 0.12, "range": 22, "blade_len": 20, "speed_mult": 1.1,
+	5: {"name": "Клинки Вампира", "damage": 9, "cooldown": 0.14, "range": 22, "blade_len": 20, "speed_mult": 1.1,
 		"color": Color(0.9, 0.15, 0.2), "glow": Color(1,0.1,0.2,0.4), "heal_on_kill": true, "rarity": "legendary"},
-	6: {"name": "Золотой Молот", "damage": 70, "cooldown": 0.5, "range": 30, "blade_len": 22, "speed_mult": 0.75,
+	6: {"name": "Золотой Молот", "damage": 75, "cooldown": 0.95, "range": 30, "blade_len": 22, "speed_mult": 0.75,
 		"color": Color(1.0, 0.85, 0.2), "glow": Color(1,0.9,0.3,0.4), "heal_on_kill": false, "rarity": "legendary"},
-	7: {"name": "Нож", "damage": 65, "cooldown": 0.18, "range": 14, "blade_len": 12, "speed_mult": 1.2,
+	7: {"name": "Нож", "damage": 28, "cooldown": 0.32, "range": 14, "blade_len": 12, "speed_mult": 1.2,
 		"color": Color(0.8, 0.8, 0.85), "glow": Color(1,1,1,0.1), "heal_on_kill": false, "rarity": "rare"},
 	8: {"name": "Искажённый Лук", "damage": 25, "cooldown": 0.8, "range": 180, "blade_len": 16, "speed_mult": 0.9,
 		"color": Color(0.4, 0.1, 0.6), "glow": Color(0.6,0.2,0.9,0.3), "heal_on_kill": false, "rarity": "rare",
 		"special": "warp_arrow"},  # Shoots forward + behind target
-	9: {"name": "Когтистая Рука", "damage": 18, "cooldown": 0.5, "range": 40, "blade_len": 18, "speed_mult": 1.0,
+	9: {"name": "Когтистая Рука", "damage": 24, "cooldown": 0.5, "range": 40, "blade_len": 18, "speed_mult": 1.0,
 		"color": Color(0.6, 0.15, 0.1), "glow": Color(0.8,0.2,0.1,0.3), "heal_on_kill": false, "rarity": "rare",
 		"special": "grab_throw"},  # Grabs and throws enemy
 	10: {"name": "Рука Змея", "damage": 8, "cooldown": 0.6, "range": 35, "blade_len": 20, "speed_mult": 1.0,
@@ -201,7 +201,7 @@ var weapon_data: Dictionary = {
 	12: {"name": "Книга Некроманта", "damage": 15, "cooldown": 0.7, "range": 150, "blade_len": 12, "speed_mult": 0.9,
 		"color": Color(0.3, 0.0, 0.4), "glow": Color(0.5,0.1,0.7,0.4), "heal_on_kill": false, "rarity": "legendary",
 		"special": "necro_souls"},  # Shoots souls, +1 per kill
-	13: {"name": "Топор", "damage": 40, "cooldown": 0.45, "range": 25, "blade_len": 20, "speed_mult": 0.85,
+	13: {"name": "Топор", "damage": 34, "cooldown": 0.50, "range": 25, "blade_len": 20, "speed_mult": 0.85,
 		"color": Color(0.5, 0.5, 0.55), "glow": Color(0.7,0.4,0.2,0.2), "heal_on_kill": false, "rarity": "uncommon",
 		"special": "combo_execute"},  # 3rd hit = instant kill (not bosses)
 	14: {"name": "Цепь", "damage": 20, "cooldown": 1.0, "range": 60, "blade_len": 30, "speed_mult": 0.9,
@@ -222,10 +222,10 @@ var weapon_data: Dictionary = {
 	19: {"name": "Копьё", "damage": 45, "cooldown": 0.6, "range": 32, "blade_len": 30, "speed_mult": 0.9,
 		"color": Color(0.55, 0.5, 0.4), "glow": Color(0.7,0.6,0.4,0.2), "heal_on_kill": false, "rarity": "uncommon",
 		"special": "spear_thrust"},  # 3 thrusts to kill, RMB = lunge
-	20: {"name": "Меч и Щит", "damage": 30, "cooldown": 0.35, "range": 24, "blade_len": 22, "speed_mult": 0.95,
+	20: {"name": "Меч и Щит", "damage": 24, "cooldown": 0.35, "range": 24, "blade_len": 22, "speed_mult": 0.95,
 		"color": Color(0.9, 0.85, 0.5), "glow": Color(1,0.9,0.4,0.5), "heal_on_kill": false, "rarity": "legendary",
 		"special": "sword_shield_combo"},  # 1-sword, 2-sword, 3-shield bash (blocks + kills ~3 combos)
-	21: {"name": "Золотая Палка", "damage": 7, "cooldown": 0.3, "range": 28, "blade_len": 26, "speed_mult": 1.0,
+	21: {"name": "Золотая Палка", "damage": 12, "cooldown": 0.3, "range": 28, "blade_len": 26, "speed_mult": 1.0,
 		"color": Color(1.0, 0.9, 0.3), "glow": Color(1,0.95,0.5,0.5), "heal_on_kill": false, "rarity": "legendary",
 		"special": "golden_staff_combo"},  # 1-hit, 2-hit, 3-spin AOE + reflect (4s)
 	22: {"name": "Факел", "damage": 5, "cooldown": 0.4, "range": 20, "blade_len": 16, "speed_mult": 1.0,
@@ -1908,18 +1908,9 @@ func _on_attack_hit(body) -> bool:
 			if status_mult > 1.0:
 				dmg = int(dmg * status_mult)
 
-		# === CS HEADSHOT ===
-		# Если игрок атакует сверху (attack_direction == 1) ИЛИ игрок выше центра врага
-		# на 8px+ — считаем хедшотом (x2 урон).
-		var is_headshot = false
-		if attack_direction == 1:
-			is_headshot = true
-		elif (global_position.y + 4.0) < (body.global_position.y - 6.0):
-			is_headshot = true
-		if is_headshot and not ("is_boss" in body and body.is_boss):
-			dmg = int(dmg * 2.0)
-			var hs_pos = body.global_position + Vector2(0, -12)
-			headshot_landed.emit(hs_pos)
+		# ХЕДШОТЫ УБРАНЫ ИЗ БЛИЖНЕГО БОЯ: каждый удар в прыжке давал ×2 и враги
+		# «разлетались за секунду». Хедшоты остались ТОЛЬКО у дальнобойного
+		# оружия (стрелы/болты — см. projectile.gd, AWP — ваншот по дизайну).
 
 		# Crit chance
 		var total_crit = crit_chance + card_crit_bonus_chance
@@ -1970,9 +1961,15 @@ func _on_attack_hit(body) -> bool:
 		elif attack_direction == -1:  # down
 			knockback = Vector2(dir * 0.3, 0.8).normalized()
 
-		# Hammer has extra knockback
-		if current_weapon == 4 or current_weapon == 6:
-			knockback *= 1.8
+		# === ВЕС ОРУЖИЯ (Dead Cells) ===
+		# Тяжёлое ОТШВЫРИВАЕТ врага (удар ощущается весомым), быстрые клинки
+		# почти не отталкивают — враг остаётся рядом для шинковки серией.
+		var wd_cd: float = wd.get("cooldown", 0.3)
+		var heavy_hit: bool = attack_is_heavy or wd_cd >= 0.85
+		if heavy_hit:
+			knockback *= 1.7
+		elif wd_cd <= 0.35:
+			knockback *= 0.6
 
 		var special = wd.get("special", "")
 
@@ -2090,8 +2087,9 @@ func _on_attack_hit(body) -> bool:
 							if hit_others >= 2:
 								break
 
-		# Hit-stop: freeze for a few frames on hit
-		# По боссам уменьшаем заморозку — длинные паузы при ударах ощущаются как "залипание"
+		# Hit-stop по ВЕСУ оружия (Dead Cells): тяжёлый удар «застревает» в
+		# кадре с сильной тряской — чувствуется чанк; быстрые клинки почти без
+		# паузы — поток не рвётся. По боссам паузы короче (иначе «залипание»).
 		var is_boss_target = ("is_boss" in body and body.is_boss)
 		if is_crit:
 			hit_stop_timer = 0.025 if is_boss_target else 0.07
@@ -2099,6 +2097,12 @@ func _on_attack_hit(body) -> bool:
 			# Crit flash: briefly tint enemy white
 			if body.has_method("flash_white"):
 				body.flash_white()
+		elif heavy_hit:
+			hit_stop_timer = 0.03 if is_boss_target else 0.10
+			screen_shake.emit(3.5, 0.16)
+		elif wd_cd <= 0.35:
+			hit_stop_timer = 0.008 if is_boss_target else 0.022
+			screen_shake.emit(0.8, 0.06)
 		else:
 			hit_stop_timer = 0.012 if is_boss_target else 0.04
 			screen_shake.emit(1.5, 0.1)
